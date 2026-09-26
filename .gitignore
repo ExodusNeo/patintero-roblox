@@ -13,3 +13,6 @@ ServerPackages/
 .idea/
 .DS_Store
 Thumbs.db
+
+# CodeGraph Index
+.codegraph/
