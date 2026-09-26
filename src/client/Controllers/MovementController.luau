@@ -1,11 +1,12 @@
 --!strict
 --[[
     MovementController.luau
-    Client movement system handling sprinting, power sliding, stamina economy,
+    Client movement system handling sprinting, physical power sliding, stamina economy,
     and rigid line-constraint mechanics for Guards.
 ]]
 
 local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -19,11 +20,15 @@ local FirstPersonController = require(script.Parent.FirstPersonController)
 local MovementController = {}
 
 local player = Players.LocalPlayer
+local camera = Workspace.CurrentCamera or Workspace:WaitForChild("Camera") :: Camera
+
 local currentStamina = Config.Movement.MaxStamina
 local isSprinting = false
 local isSliding = false
-local lastStaminaDrainTime = 0
+local slideStartTime = 0
+local slideDirection = Vector3.zero
 local lastSlideTime = 0
+local lastStaminaDrainTime = 0
 
 local currentRole: Types.GuardRole? = nil
 local currentTeam: Types.Team = "Spectators"
@@ -50,10 +55,10 @@ local function applySpeed()
     local _, humanoid, _ = getCharacterComponents()
     if not humanoid then return end
 
-    if currentTeam == "Guards" then
-        humanoid.WalkSpeed = Config.Movement.GuardStrafeSpeed
-    elseif isSliding then
+    if isSliding then
         humanoid.WalkSpeed = Config.Movement.SlideInitialSpeed
+    elseif currentTeam == "Guards" then
+        humanoid.WalkSpeed = if isSprinting and currentStamina > 0 then Config.Movement.GuardStrafeSpeed + 4 else Config.Movement.GuardStrafeSpeed
     elseif isSprinting and currentStamina > 0 then
         humanoid.WalkSpeed = Config.Movement.SprintSpeed
     else
@@ -69,9 +74,23 @@ local function triggerSlide()
 
     local _, humanoid, root = getCharacterComponents()
     if not humanoid or not root or humanoid.FloorMaterial == Enum.Material.Air then return end
-    if humanoid.MoveDirection.Magnitude <= 0.1 then return end
+
+    -- Determine slide direction: either move direction or camera forward
+    local moveDir = humanoid.MoveDirection
+    if moveDir.Magnitude > 0.1 then
+        slideDirection = moveDir.Unit
+    else
+        local camLook = camera.CFrame.LookVector
+        local flatLook = Vector3.new(camLook.X, 0, camLook.Z)
+        if flatLook.Magnitude > 0.05 then
+            slideDirection = flatLook.Unit
+        else
+            slideDirection = root.CFrame.LookVector
+        end
+    end
 
     isSliding = true
+    slideStartTime = now
     lastSlideTime = now
     currentStamina = math.clamp(currentStamina - Config.Movement.SlideCost, 0, Config.Movement.MaxStamina)
     lastStaminaDrainTime = now
@@ -79,11 +98,15 @@ local function triggerSlide()
     FirstPersonController.SetSliding(true)
     applySpeed()
 
-    -- Fire cosmetic slide event to server
+    -- Apply initial physical burst of velocity
+    local boostVel = slideDirection * Config.Movement.SlideInitialSpeed
+    root.AssemblyLinearVelocity = Vector3.new(boostVel.X, root.AssemblyLinearVelocity.Y, boostVel.Z)
+
+    -- Fire cosmetic slide event for dust VFX
     local cosmeticEvent = Remotes.GetUnreliableEvent("CosmeticAction")
     cosmeticEvent:FireServer("Slide", root.Position)
 
-    -- Decelerate slide
+    -- End slide after duration
     task.delay(Config.Movement.SlideDuration, function()
         if isSliding then
             isSliding = false
@@ -102,20 +125,18 @@ function MovementController.Init()
         applySpeed()
     end)
 
-    -- Input bindings
+    -- Input bindings: Sprint (Shift) & Slide (C / Ctrl)
     UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: boolean)
         if gameProcessed then return end
 
         if input.KeyCode == Enum.KeyCode.LeftShift then
-            if currentTeam == "Passers" and currentStamina > 5 then
+            if currentStamina > 5 then
                 isSprinting = true
                 FirstPersonController.SetSprinting(true)
                 applySpeed()
             end
         elseif input.KeyCode == Enum.KeyCode.C or input.KeyCode == Enum.KeyCode.LeftControl then
-            if currentTeam == "Passers" then
-                triggerSlide()
-            end
+            triggerSlide()
         end
     end)
 
@@ -129,15 +150,25 @@ function MovementController.Init()
         end
     end)
 
-    -- RenderStepped loop: Stamina economy + Guard Line Constraint
+    -- RenderStepped loop: Slide velocity sustain, stamina economy, and guard rail locking
     RunService.RenderStepped:Connect(function(deltaTime: number)
         local _, humanoid, root = getCharacterComponents()
         if not humanoid or not root then return end
 
         local now = os.clock()
 
-        -- 1. Stamina management
-        if isSprinting and humanoid.MoveDirection.Magnitude > 0 then
+        -- 1. Active Slide Physics Glide
+        if isSliding then
+            local elapsed = now - slideStartTime
+            local alpha = math.clamp(elapsed / Config.Movement.SlideDuration, 0, 1)
+            -- Ease-out velocity decay from 42 studs/s down to 24 studs/s
+            local currentSlideSpeed = math.lerp(Config.Movement.SlideInitialSpeed, Config.Movement.WalkSpeed + 6, alpha)
+            local slideVel = slideDirection * currentSlideSpeed
+            root.AssemblyLinearVelocity = Vector3.new(slideVel.X, root.AssemblyLinearVelocity.Y, slideVel.Z)
+        end
+
+        -- 2. Stamina Management
+        if isSprinting and humanoid.MoveDirection.Magnitude > 0 and not isSliding then
             currentStamina = math.clamp(currentStamina - (Config.Movement.SprintDrainRate * deltaTime), 0, Config.Movement.MaxStamina)
             lastStaminaDrainTime = now
             if currentStamina <= 0 then
@@ -145,7 +176,7 @@ function MovementController.Init()
                 FirstPersonController.SetSprinting(false)
                 applySpeed()
             end
-        elseif (now - lastStaminaDrainTime) >= Config.Movement.StaminaRegenDelay and currentStamina < Config.Movement.MaxStamina then
+        elseif (now - lastStaminaDrainTime) >= Config.Movement.StaminaRegenDelay and currentStamina < Config.Movement.MaxStamina and not isSliding then
             currentStamina = math.clamp(currentStamina + (Config.Movement.StaminaRegenRate * deltaTime), 0, Config.Movement.MaxStamina)
         end
 
@@ -153,7 +184,7 @@ function MovementController.Init()
             onStaminaChangedCallback(currentStamina, Config.Movement.MaxStamina)
         end
 
-        -- 2. Guard Line Constraint (Physical Rail Lock)
+        -- 3. Guard Line Constraint (Physical Rail Lock)
         if currentTeam == "Guards" and currentRole then
             local lineDefs = CourtGeometry.GetLineDefinitions()
             local lineDef = lineDefs[currentRole]
