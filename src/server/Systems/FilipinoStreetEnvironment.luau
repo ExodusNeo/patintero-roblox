@@ -70,7 +70,7 @@ function FilipinoStreetEnvironment.BuildSariSariStore(parent: Instance, origin: 
     storeFolder.Name = "SariSariStore"
     storeFolder.Parent = parent
 
-    local baseCF = CFrame.new(origin)
+    local baseCF = CFrame.new(origin) * CFrame.Angles(0, math.rad(-90), 0)
 
     -- Concrete hollow block main building
     createPart("StoreWalls", Vector3.new(24, 14, 18), baseCF * CFrame.new(0, 7, 0), Enum.Material.Concrete, Color3.fromRGB(150, 150, 150), storeFolder)
@@ -91,7 +91,7 @@ function FilipinoStreetEnvironment.BuildSariSariStore(parent: Instance, origin: 
     -- Hand-painted Store Signage
     local signPart = createPart("StoreSign", Vector3.new(16, 3.5, 0.6), baseCF * CFrame.new(0, 12, 9.4), Enum.Material.WoodPlanks, Color3.fromRGB(230, 220, 190), storeFolder)
     local surfaceGui = Instance.new("SurfaceGui")
-    surfaceGui.Face = Enum.NormalId.Front
+    surfaceGui.Face = Enum.NormalId.Back
     surfaceGui.CanvasSize = Vector2.new(800, 200)
     surfaceGui.Parent = signPart
 
@@ -268,7 +268,7 @@ function FilipinoStreetEnvironment.BuildMakeshiftBasketballHoop(parent: Instance
     hoopFolder.Name = "BarangayBasketballHoop"
     hoopFolder.Parent = parent
 
-    local baseCF = CFrame.new(position)
+    local baseCF = CFrame.new(position) * CFrame.Angles(0, math.rad(90), 0)
 
     -- Weathered plywood backboard with painted red inner square
     local backboard = createPart("Backboard", Vector3.new(6, 4, 0.4), baseCF * CFrame.new(0, 14, 0), Enum.Material.Wood, Color3.fromRGB(220, 215, 205), hoopFolder)
@@ -288,18 +288,20 @@ function FilipinoStreetEnvironment.BuildPerimeterWalls(parent: Instance, courtWi
     wallsFolder.Name = "PerimeterWalls"
     wallsFolder.Parent = parent
 
-    local halfW = courtWidth / 2 + 10
+    local halfW = courtWidth / 2
+    local leftWallX = -halfW - 9 -- Behind left sidewalk
+    local rightWallX = halfW + 27 -- Behind Sari-Sari store
     local halfL = courtLength / 2 + 30
     local wallHeight = 8
 
     -- Left Wall (CHB with concrete post columns)
-    createPart("LeftCHBWall", Vector3.new(1.5, wallHeight, halfL * 2), CFrame.new(-halfW, centerY + wallHeight / 2, 0), Enum.Material.Concrete, Color3.fromRGB(140, 140, 145), wallsFolder)
+    createPart("LeftCHBWall", Vector3.new(1.5, wallHeight, halfL * 2), CFrame.new(leftWallX, centerY + wallHeight / 2, 0), Enum.Material.Concrete, Color3.fromRGB(140, 140, 145), wallsFolder)
 
     -- Right Wall (behind Sari-Sari store)
-    createPart("RightCHBWall", Vector3.new(1.5, wallHeight, halfL * 2), CFrame.new(halfW, centerY + wallHeight / 2, 0), Enum.Material.Concrete, Color3.fromRGB(140, 140, 145), wallsFolder)
+    createPart("RightCHBWall", Vector3.new(1.5, wallHeight, halfL * 2), CFrame.new(rightWallX, centerY + wallHeight / 2, 0), Enum.Material.Concrete, Color3.fromRGB(140, 140, 145), wallsFolder)
 
     -- Hand-painted Barangay Wall Signage ("BAWAL MAGTAPON NG BASURA")
-    local signWallPart = createPart("BawalSignPart", Vector3.new(0.2, 3, 10), CFrame.new(-halfW + 0.8, centerY + 4.5, -10), Enum.Material.SmoothPlastic, Color3.fromRGB(240, 240, 240), wallsFolder)
+    local signWallPart = createPart("BawalSignPart", Vector3.new(0.2, 3, 10), CFrame.new(leftWallX + 0.8, centerY + 4.5, -10), Enum.Material.SmoothPlastic, Color3.fromRGB(240, 240, 240), wallsFolder)
     local sGui = Instance.new("SurfaceGui")
     sGui.Face = Enum.NormalId.Right
     sGui.CanvasSize = Vector2.new(600, 180)

@@ -69,8 +69,14 @@ function CourtService.Init()
     -- 1. Setup Golden Hour Dapit-Hapon Lighting
     FilipinoStreetEnvironment.SetupGoldenHourLighting()
 
-    -- Check if court already exists or construct procedural court
+    -- Check if court already exists with child instances (customized or pre-built in Studio)
     local existingCourt = Workspace:FindFirstChild("PatinteroCourt")
+    if existingCourt and #existingCourt:GetChildren() > 0 then
+        -- Preserve existing court in Workspace so manual Studio edits are retained!
+        courtFolder = existingCourt
+        return
+    end
+
     if existingCourt then
         existingCourt:Destroy()
     end
