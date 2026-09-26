@@ -2,7 +2,7 @@
 --[[
     MovementController.luau
     Client movement system handling sprinting, physical power sliding, stamina economy,
-    and rigid line-constraint mechanics for Guards.
+    sneaker screeches, slide whoosh audio, and rigid line-constraint mechanics for Guards.
 ]]
 
 local Players = game:GetService("Players")
@@ -16,6 +16,7 @@ local Config = require(ReplicatedStorage.Shared.Modules.Config)
 local CourtGeometry = require(ReplicatedStorage.Shared.Modules.CourtGeometry)
 local Remotes = require(ReplicatedStorage.Shared.Modules.Remotes)
 local FirstPersonController = require(script.Parent.FirstPersonController)
+local SoundController = require(script.Parent.SoundController)
 
 local MovementController = {}
 
@@ -96,6 +97,7 @@ local function triggerSlide()
     lastStaminaDrainTime = now
 
     FirstPersonController.SetSliding(true)
+    SoundController.StartSlideSound()
     applySpeed()
 
     -- Apply initial physical burst of velocity
@@ -111,6 +113,7 @@ local function triggerSlide()
         if isSliding then
             isSliding = false
             FirstPersonController.SetSliding(false)
+            SoundController.StopSlideSound()
             applySpeed()
         end
     end)
@@ -133,6 +136,7 @@ function MovementController.Init()
             if currentStamina > 5 then
                 isSprinting = true
                 FirstPersonController.SetSprinting(true)
+                SoundController.PlaySneakerSqueak()
                 applySpeed()
             end
         elseif input.KeyCode == Enum.KeyCode.C or input.KeyCode == Enum.KeyCode.LeftControl then
@@ -179,6 +183,9 @@ function MovementController.Init()
         elseif (now - lastStaminaDrainTime) >= Config.Movement.StaminaRegenDelay and currentStamina < Config.Movement.MaxStamina and not isSliding then
             currentStamina = math.clamp(currentStamina + (Config.Movement.StaminaRegenRate * deltaTime), 0, Config.Movement.MaxStamina)
         end
+
+        local staminaRatio = currentStamina / Config.Movement.MaxStamina
+        SoundController.UpdateStaminaAudio(staminaRatio)
 
         if onStaminaChangedCallback then
             onStaminaChangedCallback(currentStamina, Config.Movement.MaxStamina)

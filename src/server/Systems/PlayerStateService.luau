@@ -51,6 +51,18 @@ function PlayerStateService.Init()
         playerStates[player] = createDefaultState(player)
         replicatePlayerState(player)
     end
+
+    -- Replicate non-critical cosmetic actions (slide dust, etc.) to all other clients
+    local cosmeticEvent = Remotes.GetUnreliableEvent("CosmeticAction")
+    cosmeticEvent.OnServerEvent:Connect(function(player: Player, actionType: any, position: any)
+        if typeof(actionType) == "string" and typeof(position) == "Vector3" then
+            for _, otherPlayer in ipairs(Players:GetPlayers()) do
+                if otherPlayer ~= player then
+                    cosmeticEvent:FireClient(otherPlayer, actionType, position)
+                end
+            end
+        end
+    end)
 end
 
 function PlayerStateService.GetState(player: Player): Types.PlayerMatchState?

@@ -3,7 +3,7 @@
     TagController.luau
     Client tagging controller for Guards.
     Handles tag inputs, client-side targeting, reach prediction, arm swipe VFX,
-    and hit response feedback.
+    audio whoosh feedback, and hit response.
 ]]
 
 local Players = game:GetService("Players")
@@ -15,6 +15,7 @@ local TweenService = game:GetService("TweenService")
 local Types = require(ReplicatedStorage.Shared.Modules.Types)
 local Config = require(ReplicatedStorage.Shared.Modules.Config)
 local Remotes = require(ReplicatedStorage.Shared.Modules.Remotes)
+local SoundController = require(script.Parent.SoundController)
 
 local TagController = {}
 
@@ -60,6 +61,9 @@ local function findTaggablePasser(): Player?
 end
 
 local function playSwingEffect()
+    -- Arm whoosh sound
+    SoundController.PlaySFX("SlideWhoosh", Vector2.new(1.35, 1.55), 0.6)
+
     -- Camera punch effect
     local originalCFrame = camera.CFrame
     local punchCFrame = originalCFrame * CFrame.Angles(math.rad(-3), 0, 0)

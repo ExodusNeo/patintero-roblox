@@ -6,6 +6,7 @@
 
 local Players = game:GetService("Players")
 
+local SoundController = require(script.Parent.Controllers.SoundController)
 local HUDController = require(script.Parent.Controllers.HUDController)
 local CourtVFXController = require(script.Parent.Controllers.CourtVFXController)
 local FirstPersonController = require(script.Parent.Controllers.FirstPersonController)
@@ -14,6 +15,7 @@ local TagController = require(script.Parent.Controllers.TagController)
 
 print(`[Client] Initializing Patintero Client Controllers for {Players.LocalPlayer.Name}...`)
 
+SoundController.Init()
 HUDController.Init()
 CourtVFXController.Init()
 FirstPersonController.Init()
