@@ -108,27 +108,32 @@ function CourtService.Init()
     local sidewalkHeight = 0.8
 
     local function createSidewalk(name: string, posX: number)
+        local sidewalkModel = Instance.new("Model")
+        sidewalkModel.Name = name
+        sidewalkModel.Parent = folder
+
         local sidewalk = Instance.new("Part")
-        sidewalk.Name = name
+        sidewalk.Name = "Walkway"
         sidewalk.Size = Vector3.new(sidewalkWidth, sidewalkHeight + 2, totalStreetLength)
         sidewalk.Position = Vector3.new(posX, centerY + (sidewalkHeight / 2) - 1, 0)
         sidewalk.Anchored = true
         sidewalk.CanCollide = true
         sidewalk.Material = Enum.Material.Concrete
         sidewalk.Color = Color3.fromRGB(155, 155, 160)
-        sidewalk.Parent = folder
+        sidewalk.Parent = sidewalkModel
+        sidewalkModel.PrimaryPart = sidewalk
 
         -- Yellow/Black painted curb
         local curbX = if posX < 0 then posX + (sidewalkWidth / 2) else posX - (sidewalkWidth / 2)
         local curb = Instance.new("Part")
-        curb.Name = name .. "Curb"
+        curb.Name = "Curb"
         curb.Size = Vector3.new(0.6, sidewalkHeight + 0.2, totalStreetLength)
         curb.Position = Vector3.new(curbX, centerY + (sidewalkHeight / 2), 0)
         curb.Anchored = true
         curb.CanCollide = true
         curb.Material = Enum.Material.Concrete
         curb.Color = Color3.fromRGB(220, 180, 40) -- Weathered yellow curb
-        curb.Parent = folder
+        curb.Parent = sidewalkModel
     end
 
     createSidewalk("SidewalkLeft", -halfW - (sidewalkWidth / 2) - 2)
