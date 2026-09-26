@@ -1,0 +1,15 @@
+# Roblox Studio & Builds
+*.rbxl
+*.rbxlx
+*.rbxmx
+
+# Packages & Package Managers
+.wally/
+Packages/
+ServerPackages/
+
+# Editor & OS Files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
