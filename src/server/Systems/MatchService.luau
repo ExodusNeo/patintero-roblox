@@ -3,10 +3,10 @@
     MatchService.luau
     Authoritative server service orchestrating the Patintero match loop.
     Manages phases, team rotations, round timers, zone checkpoints, and "Tubig!" scoring.
+    Implements a strict, anti-exploit sequential lap state machine (Outbound -> Inbound).
 ]]
 
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Types = require(ReplicatedStorage.Shared.Modules.Types)
@@ -133,23 +133,29 @@ local function checkPasserPositions()
         local currentZone = CourtGeometry.GetZoneAtPosition(root.Position)
         if not currentZone then continue end
 
-        -- 1. Forward progression (Advancing through checkpoints)
-        if not state.hasReachedEndZone then
-            if currentZone.checkpointIndex > state.checkpointProgress then
+        -- PHASE 1: Outbound Journey (Home Base -> Zone 1 -> Zone 2 -> Safehouse)
+        if state.lapPhase == "Outbound" then
+            -- Player must advance strictly in sequence: next checkpoint must be highestZoneCleared + 1
+            if currentZone.checkpointIndex == state.highestZoneCleared + 1 then
                 PlayerStateService.SetCheckpoint(player, currentZone.checkpointIndex, currentZone.isEndZone)
                 matchState.passerScore += Config.Match.PointsForZoneAdvance
                 broadcastMatchState()
-                checkpointEvent:FireAllClients(player.UserId, currentZone.name, matchState.passerScore)
+
+                local zoneLabel = if currentZone.isEndZone then "SAFEHOUSE" else currentZone.name
+                checkpointEvent:FireAllClients(player.UserId, zoneLabel, matchState.passerScore)
             end
-        else
-            -- 2. Return journey: Reached EndZone and made it back to HomeZone!
-            if currentZone.isHomeZone then
+
+        -- PHASE 2: Inbound Return Journey (Safehouse -> Zone 2 -> Zone 1 -> Home Base)
+        elseif state.lapPhase == "Inbound" then
+            -- Standing in EndZone or intermediate zones awards 0 duplicate points!
+            -- Only reaching Home Base with a valid completed trip triggers "TUBIG!"
+            if currentZone.isHomeZone and state.hasReachedEndZone then
                 matchState.passerScore += Config.Match.PointsForTubig
                 broadcastMatchState()
                 tubigEvent:FireAllClients(player.UserId, player.DisplayName, matchState.passerScore)
 
-                -- Reset checkpoint progress for consecutive runs
-                PlayerStateService.SetCheckpoint(player, 0, false)
+                -- Explicitly reset lap state so player can embark on a new outbound run
+                PlayerStateService.ResetLap(player)
             end
         end
     end

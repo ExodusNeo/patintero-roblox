@@ -12,6 +12,8 @@ export type MatchPhase = "Lobby" | "Countdown" | "RoundActive" | "RoundEnded" | 
 
 export type MovementState = "Idle" | "Walking" | "Sprinting" | "Sliding" | "Stunned"
 
+export type LapPhase = "Outbound" | "Inbound"
+
 export type LineDefinition = {
     id: GuardRole,
     name: string,
@@ -37,7 +39,8 @@ export type PlayerMatchState = {
     movementState: MovementState,
     stamina: number,
     lives: number,
-    checkpointProgress: number,
+    lapPhase: LapPhase,
+    highestZoneCleared: number,
     hasReachedEndZone: boolean,
     isTagged: boolean,
 }

@@ -23,7 +23,8 @@ local function createDefaultState(player: Player): Types.PlayerMatchState
         movementState = "Idle",
         stamina = Config.Movement.MaxStamina,
         lives = Config.Match.MaxLivesPerPasser,
-        checkpointProgress = 0,
+        lapPhase = "Outbound",
+        highestZoneCleared = 0,
         hasReachedEndZone = false,
         isTagged = false,
     }
@@ -90,14 +91,25 @@ function PlayerStateService.SetTagged(player: Player, isTagged: boolean)
     replicatePlayerState(player)
 end
 
-function PlayerStateService.SetCheckpoint(player: Player, checkpoint: number, reachedEndZone: boolean)
+function PlayerStateService.SetCheckpoint(player: Player, zoneIndex: number, isEndZone: boolean)
     local state = playerStates[player]
     if not state then return end
 
-    state.checkpointProgress = checkpoint
-    if reachedEndZone then
+    state.highestZoneCleared = zoneIndex
+    if isEndZone then
         state.hasReachedEndZone = true
+        state.lapPhase = "Inbound"
     end
+    replicatePlayerState(player)
+end
+
+function PlayerStateService.ResetLap(player: Player)
+    local state = playerStates[player]
+    if not state then return end
+
+    state.lapPhase = "Outbound"
+    state.highestZoneCleared = 0
+    state.hasReachedEndZone = false
     replicatePlayerState(player)
 end
 
@@ -107,7 +119,8 @@ function PlayerStateService.ResetForNewRound(player: Player)
 
     state.lives = Config.Match.MaxLivesPerPasser
     state.isTagged = false
-    state.checkpointProgress = 0
+    state.lapPhase = "Outbound"
+    state.highestZoneCleared = 0
     state.hasReachedEndZone = false
     state.stamina = Config.Movement.MaxStamina
     replicatePlayerState(player)

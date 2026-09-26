@@ -192,8 +192,8 @@ function CourtService.GetSpawnCFrame(team: Types.Team, guardRole: Types.GuardRol
     local centerY = courtConfig.CenterPosition.Y + 3
 
     if team == "Passers" then
-        -- Home Base
-        return CFrame.new(0, centerY, -halfL - 10) * CFrame.Angles(0, 0, 0)
+        -- Home Base, facing forward down the court towards the Safehouse
+        return CFrame.lookAt(Vector3.new(0, centerY, -halfL - 10), Vector3.new(0, centerY, 0))
     elseif team == "Guards" and guardRole then
         local lineDefs = CourtGeometry.GetLineDefinitions()
         local lineDef = lineDefs[guardRole]
