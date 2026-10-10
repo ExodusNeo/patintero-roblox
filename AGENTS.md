@@ -8,6 +8,10 @@ rollable **Styles** (rarity-weighted, each with a passive + two skills) in the s
 > tunable or removed feature must be written into this file (usually §5 Game design, plus §4 for
 > new attributes/conventions) **in the same commit / PR as the code**. A feature is not done until
 > it is documented here. Update or delete lines that are no longer true — never leave stale docs.
+>
+> **No unrequested in-game explanations.** When the user asks for a change, implement it — don't
+> add UI text that explains or announces the change to players (e.g. "You keep one style").
+> Only add player-facing text the user actually asked for.
 
 ---
 
@@ -109,8 +113,8 @@ only new systems. If several rows match, load all of them. If none match, say so
 ### Styles menu (hub; G key or the top-left STYLES button) — `SpinController`
 - Left: 3D preview of the player's own avatar on a podium (ViewportFrame + WorldModel, scripts
   stripped), background tinted by rarity, looping the current style's `pose`.
-- Right: style name, rarity, description, skills and passives, the roll **odds** (from
-  `Config.Styles.RarityWeights`) and SPIN.
+- Right: style name, rarity, description, skills and passives, the roll **odds** per tier (from
+  `Config.Styles.RarityWeights`) listing every style in each tier, and SPIN.
 - Spin: names shuffle and slow down, then the result is revealed with its pose. The result (name,
   EQUIPPED tag, skill bar) stays hidden until the reveal even though the server sets `Style` instantly.
   The skill bar is hidden while the menu is open.
