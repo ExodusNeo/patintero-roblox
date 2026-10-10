@@ -14,7 +14,10 @@ rollable **Styles** (rarity-weighted, each with a passive + two skills) in the s
   - Read/edit: `script_read`, `multi_edit` (also creates scripts — pass `className`).
   - Run/verify: `execute_luau` (Edit/Server/Client), `start_stop_play`, `get_console_output`, `screen_capture`.
 - `src/` + `default.project.json` are a **Rojo mirror for git only**. It may lag Studio.
-  Before committing, sync Studio → `src/` explicitly. Never `rojo serve` over Studio without syncing first.
+  Before committing, sync Studio → `src/`: run `node tools/sync-receiver.js .` in the background, then
+  `execute_luau` (Edit) the contents of `tools/studio-sync-sender.luau`; review `git diff`, commit.
+  (Deleted scripts are not removed from `src/` by the sync — delete those files by hand.)
+  Never `rojo serve` over Studio without syncing first.
 - Edits only persist when the user saves the place in Studio (Ctrl+S / publish). Remind them after big changes.
 - Verify every gameplay change with a playtest: `start_stop_play` → `get_console_output` → stop.
 - `.codegraph/` (CodeGraph index) only reflects `src/` on disk; use it for disk-side work only.
