@@ -3,7 +3,7 @@
     SpinController.luau
     Hub-only Styles menu (G or the STYLES button):
     - a 3D preview of your own avatar doing the selected style's pose (emotes from your Animate script)
-    - the roll odds; players keep exactly one style and every spin replaces it
+    - the roll odds per tier, listing every style in each tier
     - SPIN, which shuffles through the roster and reveals the result with its pose
     The SPIN button is Modal so the mouse is free even if the camera is mouse-locked.
 ]]
@@ -298,20 +298,26 @@ local function buildUI()
     rarityLabel = makeLabel(info, 3, 0.06, Enum.Font.GothamBold, 16)
     descLabel = makeLabel(info, 4, 0.09, Enum.Font.Gotham, 15)
     skillsLabel = makeLabel(info, 5, 0.12, Enum.Font.GothamMedium, 14)
-    -- Roll odds, colored by rarity. Players keep one style; every spin replaces it.
-    local odds = makeLabel(info, 6, 0.14, Enum.Font.GothamBold, 14)
+    -- Roll odds per tier with every style in that tier, colored by rarity
+    local odds = makeLabel(info, 6, 0.26, Enum.Font.GothamBold, 14)
     odds.RichText = true
     local weights = Config.Styles.RarityWeights :: { [string]: number }
     local total = 0
     for _, rarity in Styles.RarityOrder do
         total += weights[rarity] or 0
     end
-    local parts = {}
+    local lines = {}
     for _, rarity in Styles.RarityOrder do
+        local names = {}
+        for _, style in Styles.List do
+            if style.rarity == rarity then
+                table.insert(names, style.name)
+            end
+        end
         local percent = math.round((weights[rarity] or 0) / total * 100)
-        table.insert(parts, `<font color="#{Styles.RarityColors[rarity]:ToHex()}">{rarity} {percent}%</font>`)
+        table.insert(lines, `<font color="#{Styles.RarityColors[rarity]:ToHex()}">{string.upper(rarity)} {percent}%</font>   {table.concat(names, ", ")}`)
     end
-    odds.Text = "ODDS   " .. table.concat(parts, "  ·  ") .. "\nYou keep one style. Each spin replaces it."
+    odds.Text = table.concat(lines, "\n")
 
     spinButton = Instance.new("TextButton")
     spinButton.Name = "SpinButton"
