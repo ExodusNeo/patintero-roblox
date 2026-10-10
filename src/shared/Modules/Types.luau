@@ -76,6 +76,9 @@ export type StyleDef = {
     staminaMult: number,
     reachBonus: number,
     skills: { Q: SkillDef, E: SkillDef },
+    -- Showcase pose: an emote from the character's Animate script
+    -- (wave, point, dance, dance2, dance3, cheer, laugh)
+    pose: string,
 }
 
 return {}

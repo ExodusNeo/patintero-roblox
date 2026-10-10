@@ -1,8 +1,9 @@
 --!strict
 --[[
     DataService.luau
-    Loads and saves each player's Spins + Style. The live values are the Player attributes
-    `Spins` and `Style` (owned by StyleService); this service only persists them.
+    Loads and saves each player's Spins, Style and Collection (every style they've rolled). The live
+    values are the Player attributes `Spins`, `Style` and `Collection` (comma-separated ids, owned by
+    StyleService); this service only persists them.
     shortcut: no session locking (last write wins across servers); move to ProfileStore if trading/paid spins are added.
 ]]
 
@@ -43,6 +44,7 @@ end
 local function load(player: Player)
     local spins = Config.Styles.StartingSpins
     local style = Config.Styles.DefaultStyle
+    local collection: { string } = {}
 
     local ok, data = false, nil
     if store then
@@ -60,6 +62,16 @@ local function load(player: Player)
         if Styles.Exists(data.style) then
             style = data.style
         end
+        if typeof(data.collection) == "table" then
+            for _, id in data.collection do
+                if Styles.Exists(id) and not table.find(collection, id) then
+                    table.insert(collection, id)
+                end
+            end
+        end
+    end
+    if not table.find(collection, style) then
+        table.insert(collection, style)
     end
 
     if not player.Parent then return end
@@ -69,6 +81,7 @@ local function load(player: Player)
     end
     player:SetAttribute("Spins", spins)
     player:SetAttribute("Style", style)
+    player:SetAttribute("Collection", table.concat(collection, ","))
 end
 
 local function save(player: Player)
@@ -78,6 +91,7 @@ local function save(player: Player)
     local data = {
         spins = player:GetAttribute("Spins"),
         style = player:GetAttribute("Style"),
+        collection = string.split((player:GetAttribute("Collection") :: string?) or "", ","),
     }
     withRetries(`save {player.UserId}`, function()
         return ds:UpdateAsync(keyFor(player), function()

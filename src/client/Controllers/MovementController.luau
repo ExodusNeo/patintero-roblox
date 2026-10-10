@@ -1,8 +1,8 @@
 --!strict
 --[[
     MovementController.luau
-    Client movement system handling sprinting, physical power sliding, stamina economy,
-    sneaker screeches, slide whoosh audio, and rigid line-constraint mechanics for Guards.
+    Client movement system handling heavy momentum-based running, sprinting, physical power
+    sliding, jumping/landing weight, stamina economy, and rigid line-constraint mechanics for Guards.
 ]]
 
 local Players = game:GetService("Players")
@@ -34,6 +34,11 @@ local lastSlideTime = 0
 local lastStaminaDrainTime = 0
 local dashUntil = 0
 local dashVelocity = Vector3.zero
+local targetWalkSpeed = Config.Movement.WalkSpeed
+local moveVector = Vector3.zero -- smoothed input actually fed to the Humanoid
+local landingSlowUntil = 0
+local fallSpeed = 0
+local jumpEnabled = true
 
 local currentRole: Types.GuardRole? = nil
 local currentTeam: Types.Team = "Spectators"
@@ -84,7 +89,7 @@ local function applySpeed()
     local _, humanoid, _ = getCharacterComponents()
     if not humanoid then return end
 
-    local base
+    local base: number
     if isSliding then
         base = Config.Movement.SlideInitialSpeed
     elseif currentTeam == "Guards" then
@@ -94,7 +99,65 @@ local function applySpeed()
     else
         base = Config.Movement.WalkSpeed
     end
-    humanoid.WalkSpeed = base * getSpeedMult()
+    local landing = if os.clock() < landingSlowUntil then Config.Movement.LandingSlowMult else 1
+    targetWalkSpeed = base * getSpeedMult() * landing -- the RenderStepped loop ramps WalkSpeed toward this
+end
+
+-- Heavy running: ease the input toward its target instead of snapping, so players build up speed,
+-- skid to a stop, and lose speed on sharp turns. Roblox's native controls write the raw input into
+-- MoveDirection every frame before Input+1 (verified in Studio), so we read it there and override
+-- with Move(); our override never feeds back. Humanoid speed scales with the vector's length.
+local function stepMomentum(deltaTime: number)
+    local _, humanoid, _ = getCharacterComponents()
+    if not humanoid or humanoid.Health <= 0 then
+        moveVector = Vector3.zero
+        return
+    end
+
+    local desired = humanoid.MoveDirection -- raw input this frame, world space, camera-relative
+    local look = camera.CFrame.LookVector
+    local forward = Vector3.new(look.X, 0, look.Z)
+    forward = if forward.Magnitude > 1e-3 then forward.Unit else -Vector3.zAxis
+
+    -- First person: running forward is fastest; strafing and backpedalling are slower
+    if player.CameraMode == Enum.CameraMode.LockFirstPerson and desired.Magnitude > 0.05 then
+        local facing = desired.Unit:Dot(forward) -- 1 forward, 0 sideways, -1 backwards
+        desired *= if facing >= 0
+            then math.lerp(Config.Movement.StrafeMult, 1, facing)
+            else math.lerp(Config.Movement.StrafeMult, Config.Movement.BackpedalMult, -facing)
+    end
+
+    local rate = if desired.Magnitude >= moveVector.Magnitude then 1 / Config.Movement.AccelTime else 1 / Config.Movement.DecelTime
+    if humanoid.FloorMaterial == Enum.Material.Air then
+        rate *= Config.Movement.AirControl
+    end
+    local delta = desired - moveVector
+    local step = rate * deltaTime
+    moveVector = if delta.Magnitude <= step then desired else moveVector + delta.Unit * step
+    humanoid:Move(moveVector, false)
+end
+
+-- Lower jumps that cost stamina; hard landings briefly stun your stride.
+local function setupCharacter(character: Model)
+    moveVector = Vector3.zero
+    fallSpeed = 0
+    jumpEnabled = true
+    local humanoid = character:WaitForChild("Humanoid") :: Humanoid
+    humanoid.UseJumpPower = false
+    humanoid.JumpHeight = Config.Movement.JumpHeight
+    humanoid.StateChanged:Connect(function(_old, new)
+        if new == Enum.HumanoidStateType.Jumping then
+            currentStamina = math.max(currentStamina - Config.Movement.JumpStaminaCost, 0)
+            lastStaminaDrainTime = os.clock()
+        elseif new == Enum.HumanoidStateType.Landed then
+            if fallSpeed > Config.Movement.HardLandingSpeed then
+                landingSlowUntil = os.clock() + Config.Movement.LandingSlowTime
+                moveVector *= 0.3
+                SoundController.PlaySneakerSqueak()
+            end
+            fallSpeed = 0
+        end
+    end)
 end
 
 local function triggerSlide()
@@ -112,7 +175,7 @@ local function triggerSlide()
     isSliding = true
     slideStartTime = now
     lastSlideTime = now
-    currentStamina = math.clamp(currentStamina - Config.Movement.SlideCost, 0, Config.Movement.MaxStamina)
+    currentStamina = math.clamp(currentStamina - Config.Movement.SlideCost, 0, getMaxStamina())
     lastStaminaDrainTime = now
 
     FirstPersonController.SetSliding(true)
@@ -171,6 +234,13 @@ function MovementController.RestoreStamina(amount: number)
 end
 
 function MovementController.Init()
+    RunService:BindToRenderStep("PatinteroMomentum", Enum.RenderPriority.Input.Value + 1, stepMomentum)
+
+    if player.Character then
+        task.spawn(setupCharacter, player.Character)
+    end
+    player.CharacterAdded:Connect(setupCharacter)
+
     -- Listen to state replication from server
     local playerStateEvent = Remotes.GetEvent("PlayerStateUpdated")
     playerStateEvent.OnClientEvent:Connect(function(state: Types.PlayerMatchState)
@@ -216,6 +286,25 @@ function MovementController.Init()
         applySpeed() -- speed modifiers (haste/slow) change at any time
         local frozen = getSpeedMult() <= 0
 
+        -- Speed builds up gradually (sprint ramp) and drops 3x faster; freezes and slides are instant
+        if isSliding or targetWalkSpeed <= 0 then
+            humanoid.WalkSpeed = targetWalkSpeed
+        elseif humanoid.WalkSpeed < targetWalkSpeed then
+            humanoid.WalkSpeed = math.min(targetWalkSpeed, humanoid.WalkSpeed + Config.Movement.SprintRampRate * deltaTime)
+        else
+            humanoid.WalkSpeed = math.max(targetWalkSpeed, humanoid.WalkSpeed - Config.Movement.SprintRampRate * 3 * deltaTime)
+        end
+
+        -- Track fall speed for hard landings; no jumping without the stamina for it
+        if humanoid.FloorMaterial == Enum.Material.Air then
+            fallSpeed = math.max(fallSpeed, -root.AssemblyLinearVelocity.Y)
+        end
+        local canJump = currentStamina >= Config.Movement.JumpStaminaCost
+        if canJump ~= jumpEnabled then
+            jumpEnabled = canJump
+            humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, canJump)
+        end
+
         -- 0. Skill dash burst
         if now < dashUntil and not frozen then
             root.AssemblyLinearVelocity = Vector3.new(dashVelocity.X, root.AssemblyLinearVelocity.Y, dashVelocity.Z)
@@ -233,7 +322,7 @@ function MovementController.Init()
 
         -- 2. Stamina Management
         if isSprinting and humanoid.MoveDirection.Magnitude > 0 and not isSliding then
-            currentStamina = math.clamp(currentStamina - (Config.Movement.SprintDrainRate * deltaTime), 0, Config.Movement.MaxStamina)
+            currentStamina = math.clamp(currentStamina - (Config.Movement.SprintDrainRate * deltaTime), 0, getMaxStamina())
             lastStaminaDrainTime = now
             if currentStamina <= 0 then
                 isSprinting = false
@@ -241,14 +330,14 @@ function MovementController.Init()
                 applySpeed()
             end
         elseif (now - lastStaminaDrainTime) >= Config.Movement.StaminaRegenDelay and currentStamina < getMaxStamina() and not isSliding then
-            currentStamina = math.clamp(currentStamina + (Config.Movement.StaminaRegenRate * deltaTime), 0, Config.Movement.MaxStamina)
+            currentStamina = math.clamp(currentStamina + (Config.Movement.StaminaRegenRate * deltaTime), 0, getMaxStamina())
         end
 
         local staminaRatio = currentStamina / getMaxStamina()
         SoundController.UpdateStaminaAudio(staminaRatio)
 
         if onStaminaChangedCallback then
-            onStaminaChangedCallback(currentStamina, Config.Movement.MaxStamina)
+            onStaminaChangedCallback(currentStamina, getMaxStamina())
         end
 
         -- 3. Guard Line Constraint (Physical Rail Lock)

@@ -117,6 +117,11 @@ local function onSpin(player: Player): string?
     player:SetAttribute("Spins", spins - 1)
     player:SetAttribute("Style", style.id)
     lastCast[player] = nil -- fresh style, fresh cooldowns
+
+    local owned = (player:GetAttribute("Collection") :: string?) or ""
+    if not table.find(string.split(owned, ","), style.id) then
+        player:SetAttribute("Collection", if owned == "" then style.id else `{owned},{style.id}`)
+    end
     return style.id
 end
 

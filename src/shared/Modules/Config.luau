@@ -43,6 +43,19 @@ local Config = {
         SlideCost = 20,
         StaminaRegenRate = 18,
         StaminaRegenDelay = 0.8,
+
+        -- Heavy, momentum-based feel (client): input eases toward its target instead of snapping
+        AccelTime = 0.55, -- seconds from standing still to full speed
+        DecelTime = 0.4, -- seconds to skid to a stop after letting go
+        AirControl = 0.25, -- fraction of acceleration while airborne
+        SprintRampRate = 10, -- studs/s of WalkSpeed gained per second (sprint builds up)
+        StrafeMult = 0.8, -- first person: sideways speed
+        BackpedalMult = 0.6, -- first person: backwards speed
+        JumpHeight = 4.5,
+        JumpStaminaCost = 12,
+        HardLandingSpeed = 60, -- falling faster than this (studs/s, ~9 stud drop) stuns your stride; a normal jump lands ~42
+        LandingSlowTime = 0.45,
+        LandingSlowMult = 0.5,
     },
 
     Tagging = {
