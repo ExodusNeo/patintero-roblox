@@ -128,7 +128,7 @@ local function showStyle(style: Types.StyleDef, withPose: boolean)
     local color = Styles.RarityColors[style.rarity]
     nameLabel.Text = string.upper(style.name)
     nameLabel.TextColor3 = color
-    rarityLabel.Text = if style.id == equippedId() then `{string.upper(style.rarity)}  ·  EQUIPPED` else string.upper(style.rarity)
+    rarityLabel.Text = if style.id == equippedId() and not spinning then `{string.upper(style.rarity)}  ·  EQUIPPED` else string.upper(style.rarity)
     rarityLabel.TextColor3 = color
     descLabel.Text = style.description
     local q, e = style.skills.Q, style.skills.E
@@ -152,6 +152,13 @@ local function refresh()
     local equipped = equippedId()
     hintButton.Text = `STYLES  ·  SPINS: {spins}`
 
+    -- The server sets Style/Collection the moment it rolls; keep the result hidden until the reveal.
+    if spinning then
+        spinButton.Text = "ROLLING..."
+        spinButton.BackgroundColor3 = Color3.fromRGB(70, 70, 80)
+        return
+    end
+
     local count = 0
     for _, style in Styles.List do
         local chip = chips[style.id]
@@ -168,15 +175,18 @@ local function refresh()
     end
     collectionLabel.Text = `COLLECTION  {count}/{#Styles.List}  ·  tap a style to preview`
 
-    if not spinning then
-        showStyle(Styles.Get(previewId or equipped), panel.Visible)
-    end
-    spinButton.Text = if spinning then "ROLLING..." elseif spins < 1 then "NO SPINS LEFT" else `SPIN  ({spins} left)`
-    spinButton.BackgroundColor3 = if spinning or spins < 1 then Color3.fromRGB(70, 70, 80) else Color3.fromRGB(230, 60, 60)
+    showStyle(Styles.Get(previewId or equipped), panel.Visible)
+    spinButton.Text = if spins < 1 then "NO SPINS LEFT" else `SPIN  ({spins} left)`
+    spinButton.BackgroundColor3 = if spins < 1 then Color3.fromRGB(70, 70, 80) else Color3.fromRGB(230, 60, 60)
 end
 
 local function setOpen(open: boolean)
     panel.Visible = open
+    -- The skill bar peeks out under the menu and would spoil a roll's new skill names
+    local skillBar = player.PlayerGui:FindFirstChild("SkillBar")
+    if skillBar and skillBar:IsA("ScreenGui") then
+        skillBar.Enabled = not open
+    end
     if open then
         previewId = nil
         refresh()
