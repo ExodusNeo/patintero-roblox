@@ -10,8 +10,6 @@ export type GuardRole = "Line1" | "Line2" | "Line3" | "Patotot"
 
 export type MatchPhase = "Lobby" | "Countdown" | "RoundActive" | "RoundEnded" | "MatchOver"
 
-export type MovementState = "Idle" | "Walking" | "Sprinting" | "Sliding" | "Stunned"
-
 export type LapPhase = "Outbound" | "Inbound"
 
 export type LineDefinition = {
@@ -36,9 +34,6 @@ export type PlayerMatchState = {
     userId: number,
     team: Team,
     guardRole: GuardRole?,
-    movementState: MovementState,
-    stamina: number,
-    lives: number,
     lapPhase: LapPhase,
     highestZoneCleared: number,
     hasReachedEndZone: boolean,
@@ -54,18 +49,33 @@ export type MatchState = {
     activePasserCount: number,
 }
 
-export type TagValidationResult = {
-    success: boolean,
-    reason: string?,
-    taggerUserId: number,
-    targetUserId: number,
+export type Rarity = "Common" | "Rare" | "Epic" | "Legendary"
+
+export type SkillKind = "Dash" | "Blink" | "Haste" | "SecondWind" | "LongArm" | "Slow" | "Veil"
+
+export type SkillSlot = "Q" | "E"
+
+-- power: Dash speed / Blink distance / SecondWind stamina / LongArm reach / Haste mult
+-- mult: Slow speed multiplier (0 = freeze)
+export type SkillDef = {
+    name: string,
+    kind: SkillKind,
+    cooldown: number,
+    power: number?,
+    duration: number?,
+    radius: number?,
+    mult: number?,
 }
 
-export type TagAttemptPayload = {
-    targetCharacter: Model,
-    taggerPosition: Vector3,
-    targetPosition: Vector3,
-    clientTimestamp: number,
+export type StyleDef = {
+    id: string,
+    name: string,
+    rarity: Rarity,
+    description: string,
+    speedMult: number,
+    staminaMult: number,
+    reachBonus: number,
+    skills: { Q: SkillDef, E: SkillDef },
 }
 
 return {}

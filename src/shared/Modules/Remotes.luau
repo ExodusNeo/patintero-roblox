@@ -18,12 +18,16 @@ local REMOTE_DEFINITIONS = {
         PlayerStateUpdated = "RemoteEvent",
         ZoneCheckpointReached = "RemoteEvent",
         TubigScored = "RemoteEvent",
+        UseSkill = "RemoteEvent", -- client -> server: (slot)
+        SkillCast = "RemoteEvent", -- server -> all: (casterUserId, styleId, slot, position)
+        SwitchLine = "RemoteEvent", -- client -> server: guard hops to the next free line
     },
     UnreliableEvents = {
         CosmeticAction = "UnreliableRemoteEvent",
     },
     Functions = {
         GetInitialMatchData = "RemoteFunction",
+        Spin = "RemoteFunction", -- client -> server, returns rolled style id or nil
     },
 }
 

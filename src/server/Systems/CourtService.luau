@@ -218,4 +218,13 @@ function CourtService.GetSpawnCFrame(team: Types.Team, guardRole: Types.GuardRol
     return CFrame.new(0, centerY, -halfL - 15)
 end
 
+-- Where tagged-out Passers wait: the left sidewalk, facing the court.
+function CourtService.GetSidelineCFrame(): CFrame
+    local courtConfig = Config.Court
+    local x = -courtConfig.TotalWidth / 2 - 6
+    local y = courtConfig.CenterPosition.Y + 4
+    local z = math.random(-courtConfig.TotalLength / 2, courtConfig.TotalLength / 2)
+    return CFrame.lookAt(Vector3.new(x, y, z), Vector3.new(0, y, z))
+end
+
 return CourtService

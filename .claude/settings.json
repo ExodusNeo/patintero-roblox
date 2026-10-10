@@ -1,0 +1,14 @@
+{
+  "enabledPlugins": {
+    "ponytail@ponytail": true,
+    "roblox-skills@roblox-skills": true
+  },
+  "extraKnownMarketplaces": {
+    "ponytail": {
+      "source": { "source": "github", "repo": "DietrichGebert/ponytail" }
+    },
+    "roblox-skills": {
+      "source": { "source": "github", "repo": "EL4CTEO/roblox-skills" }
+    }
+  }
+}

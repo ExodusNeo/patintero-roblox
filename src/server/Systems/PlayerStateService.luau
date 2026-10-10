@@ -9,7 +9,6 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Types = require(ReplicatedStorage.Shared.Modules.Types)
-local Config = require(ReplicatedStorage.Shared.Modules.Config)
 local Remotes = require(ReplicatedStorage.Shared.Modules.Remotes)
 
 local PlayerStateService = {}
@@ -20,9 +19,6 @@ local function createDefaultState(player: Player): Types.PlayerMatchState
         userId = player.UserId,
         team = "Spectators",
         guardRole = nil,
-        movementState = "Idle",
-        stamina = Config.Movement.MaxStamina,
-        lives = Config.Match.MaxLivesPerPasser,
         lapPhase = "Outbound",
         highestZoneCleared = 0,
         hasReachedEndZone = false,
@@ -41,6 +37,7 @@ end
 function PlayerStateService.Init()
     Players.PlayerAdded:Connect(function(player)
         playerStates[player] = createDefaultState(player)
+        player:SetAttribute("Team", "Spectators")
         replicatePlayerState(player)
     end)
 
@@ -50,6 +47,7 @@ function PlayerStateService.Init()
 
     for _, player in ipairs(Players:GetPlayers()) do
         playerStates[player] = createDefaultState(player)
+        player:SetAttribute("Team", "Spectators")
         replicatePlayerState(player)
     end
 
@@ -80,6 +78,7 @@ function PlayerStateService.SetTeam(player: Player, team: Types.Team, guardRole:
 
     state.team = team
     state.guardRole = guardRole
+    player:SetAttribute("Team", team) -- lets every client know who is who (targeting, VFX)
     replicatePlayerState(player)
 end
 
@@ -117,12 +116,10 @@ function PlayerStateService.ResetForNewRound(player: Player)
     local state = playerStates[player]
     if not state then return end
 
-    state.lives = Config.Match.MaxLivesPerPasser
     state.isTagged = false
     state.lapPhase = "Outbound"
     state.highestZoneCleared = 0
     state.hasReachedEndZone = false
-    state.stamina = Config.Movement.MaxStamina
     replicatePlayerState(player)
 end
 
