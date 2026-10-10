@@ -92,52 +92,8 @@ function CourtService.Init()
     local centerY = courtConfig.CenterPosition.Y
     local totalStreetLength = courtConfig.TotalLength + 60
 
-    -- 2. Street Asphalt Ground (Kalye)
-    local street = Instance.new("Part")
-    street.Name = "StreetAsphalt"
-    street.Size = Vector3.new(courtConfig.TotalWidth + 4, 2, totalStreetLength)
-    street.Position = Vector3.new(0, centerY - 1, 0)
-    street.Anchored = true
-    street.CanCollide = true
-    street.Material = Enum.Material.Asphalt
-    street.Color = Color3.fromRGB(50, 50, 54)
-    street.Parent = folder
-
-    -- 3. Sidewalks & Curbs on Left and Right
-    local sidewalkWidth = 8
-    local sidewalkHeight = 0.8
-
-    local function createSidewalk(name: string, posX: number)
-        local sidewalkModel = Instance.new("Model")
-        sidewalkModel.Name = name
-        sidewalkModel.Parent = folder
-
-        local sidewalk = Instance.new("Part")
-        sidewalk.Name = "Walkway"
-        sidewalk.Size = Vector3.new(sidewalkWidth, sidewalkHeight + 2, totalStreetLength)
-        sidewalk.Position = Vector3.new(posX, centerY + (sidewalkHeight / 2) - 1, 0)
-        sidewalk.Anchored = true
-        sidewalk.CanCollide = true
-        sidewalk.Material = Enum.Material.Concrete
-        sidewalk.Color = Color3.fromRGB(155, 155, 160)
-        sidewalk.Parent = sidewalkModel
-        sidewalkModel.PrimaryPart = sidewalk
-
-        -- Yellow/Black painted curb
-        local curbX = if posX < 0 then posX + (sidewalkWidth / 2) else posX - (sidewalkWidth / 2)
-        local curb = Instance.new("Part")
-        curb.Name = "Curb"
-        curb.Size = Vector3.new(0.6, sidewalkHeight + 0.2, totalStreetLength)
-        curb.Position = Vector3.new(curbX, centerY + (sidewalkHeight / 2), 0)
-        curb.Anchored = true
-        curb.CanCollide = true
-        curb.Material = Enum.Material.Concrete
-        curb.Color = Color3.fromRGB(220, 180, 40) -- Weathered yellow curb
-        curb.Parent = sidewalkModel
-    end
-
-    createSidewalk("SidewalkLeft", -halfW - (sidewalkWidth / 2) - 2)
-    createSidewalk("SidewalkRight", halfW + (sidewalkWidth / 2) + 2)
+    -- 2-3. Street asphalt (kalye) with sidewalks and curbs
+    FilipinoStreetEnvironment.BuildStreet(folder, courtConfig.TotalWidth, totalStreetLength, centerY)
 
     -- 4. Authentic Chalk Lines for Guard Rails
     local linesFolder = Instance.new("Folder")
@@ -195,6 +151,25 @@ function CourtService.Init()
     createBarrier("BarrierRight", Vector3.new(2, barrierHeight, totalStreetLength), Vector3.new(halfW + 28, centerY + barrierHeight / 2, 0))
     createBarrier("BarrierHomeBack", Vector3.new(courtConfig.TotalWidth + 40, barrierHeight, 2), Vector3.new(0, centerY + barrierHeight / 2, -halfL - 25))
     createBarrier("BarrierEndBack", Vector3.new(courtConfig.TotalWidth + 40, barrierHeight, 2), Vector3.new(0, centerY + barrierHeight / 2, halfL + 25))
+
+    CourtService.BuildNeighborhood(folder)
+end
+
+-- Rows of houses just outside the invisible barriers so the court sits inside a real barangay street.
+-- Also run once in edit mode to add them to the saved map.
+function CourtService.BuildNeighborhood(parent: Instance)
+    local halfW = Config.Court.TotalWidth / 2
+    local left, right = -halfW - 16, halfW + 31 -- left barrier ~ -36; right barrier and store reach ~52
+    local endZ = Config.Court.TotalLength / 2 + 37
+    local y = Config.Court.CenterPosition.Y
+
+    local neighborhood = Instance.new("Model")
+    neighborhood.Name = "Neighborhood"
+    FilipinoStreetEnvironment.BuildHouseRow(neighborhood, Vector3.new(left, y, -endZ + 2), Vector3.new(left, y, endZ - 2), Vector3.xAxis, 11)
+    FilipinoStreetEnvironment.BuildHouseRow(neighborhood, Vector3.new(right, y, endZ - 2), Vector3.new(right, y, -endZ + 2), -Vector3.xAxis, 22)
+    FilipinoStreetEnvironment.BuildHouseRow(neighborhood, Vector3.new(left, y, endZ), Vector3.new(right, y, endZ), -Vector3.zAxis, 33)
+    FilipinoStreetEnvironment.BuildHouseRow(neighborhood, Vector3.new(right, y, -endZ), Vector3.new(left, y, -endZ), Vector3.zAxis, 44)
+    neighborhood.Parent = parent
 end
 
 function CourtService.GetSpawnCFrame(team: Types.Team, guardRole: Types.GuardRole?): CFrame
