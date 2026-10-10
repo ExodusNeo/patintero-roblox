@@ -4,12 +4,18 @@ First-person Roblox game inspired by the Filipino street game **Patintero**, wit
 rollable **Styles** (rarity-weighted, each with a passive + two skills) in the spirit of
 *Untitled Boxing Game*. Language: Luau (`--!strict`).
 
+> **Keep this file current (mandatory).** Every new feature, mechanic, rule change, control,
+> tunable or removed feature must be written into this file (usually §5 Game design, plus §4 for
+> new attributes/conventions) **in the same commit / PR as the code**. A feature is not done until
+> it is documented here. Update or delete lines that are no longer true — never leave stale docs.
+
 ---
 
 ## 1. Workflow: Studio MCP is the source of truth
 
-- The live Studio place (**Patintereoreoreoro**, placeId `88319696116229`) is authoritative.
-  Read, edit and test through the **Roblox Studio MCP** tools, not Rojo:
+- The live Studio places are authoritative: **Patintero Hub** (start place, `88319696116229`) and
+  **Patintero** (match place, `70710330155642`). Read, edit and test through the
+  **Roblox Studio MCP** tools, not Rojo:
   - Discover: `list_roblox_studios` (get `studio_id`), `search_game_tree`, `script_search`, `script_grep`.
   - Read/edit: `script_read`, `multi_edit` (also creates scripts — pass `className`).
   - Run/verify: `execute_luau` (Edit/Server/Client), `start_stop_play`, `get_console_output`, `screen_capture`.
@@ -89,31 +95,72 @@ only new systems. If several rows match, load all of them. If none match, say so
 ## 5. Game design
 
 ### Hub (third person)
-- Players join the hub plaza. Four queue pads need 2 / 4 / 6 / 8 players (`PadSize` attribute on
-  parts in `Workspace.Hub.Pads`; add or move pads freely). A full pad counts down
-  (`Config.Hub.CountdownTime`), cancelled if anyone steps off, then `HubService` reserves a match
-  server and `TravelService` teleports the group.
-- Spinning for Styles happens **only in the hub** (G menu). Skills (Q/E) can be tried in the hub.
+- A Filipino barangay street (`HubService.BuildHub`, saved as `Workspace.Hub`): welcome arch
+  "Maligayang Pagdating sa Barangay Patintero" between spawn and pads, house rows, sari-sari store
+  with a parked jeepney, utility poles, banderitas, invisible boundary walls.
+- Four queue pads on the road (2×2 grid) need 2 / 4 / 6 / 8 players (`PadSize` attribute on parts in
+  `Workspace.Hub.Pads`; add or move pads freely). A full pad counts down (`Config.Hub.CountdownTime`),
+  cancelled if anyone steps off, then `HubService` reserves a match server and `TravelService`
+  teleports the group.
+- Spinning for Styles happens **only in the hub**. Skills (Q/E) can be tried in the hub.
 - Data is saved and released before every teleport (`DataService.Release`) so the next server
   never loads stale spins; the `Teleporting` player attribute blocks spins/queueing meanwhile.
 
+### Styles menu (hub; G key or the top-left STYLES button) — `SpinController`
+- Left: 3D preview of the player's own avatar on a podium (ViewportFrame + WorldModel, scripts
+  stripped), background tinted by rarity, looping the current style's `pose`.
+- Right: style name, rarity, description, skills and passives, the roll **odds** (from
+  `Config.Styles.RarityWeights`) and SPIN.
+- Spin: names shuffle and slow down, then the result is revealed with its pose. The result (name,
+  EQUIPPED tag, skill bar) stays hidden until the reveal even though the server sets `Style` instantly.
+  The skill bar is hidden while the menu is open.
+
 ### Match (first person) — Core loop (Patintero)
-- The match server waits for the party the hub sent (`expectedPlayers` teleport data, max
-  `Config.Match.ArrivalTimeout` s), plays 2 rounds, then teleports everyone back to the hub.
-- Two teams per round: **Passers** (runners) and **Guards** (taggers). Sides swap after each round; 2 rounds per match.
+- The match server waits for the party the hub sent (`expectedPlayers` teleport data) and until no
+  one has joined for `Config.Match.JoinSettleTime` (max `ArrivalTimeout`), plays 2 rounds, then
+  teleports everyone back to the hub. Players who arrive after teams are set spectate.
+- Two teams per match (assigned at match start); sides swap for round 2.
 - Guards are locked to chalk lines: `Line1`, `Line2`, `Line3` (across the court) and the
-  `Patotot` (center line along the court). They tag with left click / F.
+  `Patotot` (center line along the court). They tag with click / F. A lone guard gets the mid line
+  (`Line2`); **line hop** (R / HOP) moves a guard to the next free line (`Config.Tagging.LineSwitchCooldown`).
 - Passers run Home → Zone 1 → Zone 2 → Safehouse (outbound, +1 per zone in order),
   then back to Home for **"TUBIG!"** (+5). Zones must be cleared in order (no farming).
 - A tagged Passer is out for the round and sent to the sideline. Round ends at time-out or when
   all Passers are out.
-- First person is forced (`LockFirstPerson`). Shift = sprint, C/Ctrl = slide, stamina-limited.
+- Map: the court on a barangay street with house rows on all four sides (`CourtService.BuildNeighborhood`),
+  poles, banderitas strung pole-to-pole, sari-sari store, hoop, walls; packed-earth ground.
+
+### Movement (both places) — `MovementController`, tunables in `Config.Movement`
+- Heavy, momentum-based running: raw input (`Humanoid.MoveDirection`, written by Roblox's native
+  controls) is eased toward its target and re-applied with `Humanoid:Move()` at render priority
+  Input+1. ~`AccelTime` to full speed, ~`DecelTime` to skid to a stop, speed lost on sharp turns,
+  `AirControl` in the air.
+- Sprint builds up gradually (`SprintRampRate`); first person: strafe `StrafeMult`, backpedal `BackpedalMult`.
+- Jumps are low (`JumpHeight`) and cost stamina (`JumpStaminaCost`); hard landings (>`HardLandingSpeed`)
+  briefly slow the stride. Stamina max scales with the style's `staminaMult`.
+- Slide (C/Ctrl) and stamina-limited sprint (Shift) as before; first person is forced in matches.
+
+### Controls (keyboard / gamepad / touch) — ContextActionService, touch spots in `TouchLayout`
+| Action | Keyboard | Gamepad | Touch |
+| --- | --- | --- | --- |
+| Run | Shift | L3 | RUN |
+| Slide | C / Ctrl | B | SLIDE |
+| Skill Q / E | Q / E | X / Y | skill-name buttons |
+| Tag (guards) | Click / F | R2 | TAG |
+| Line hop (guards) | R | R1 | HOP |
+| Styles menu (hub) | G | — | STYLES button |
 
 ### Styles (rolled with Spins)
-- Every player has one equipped Style. **Spin** (hub, menu key `G`) rolls a new one by rarity weight;
-  the result replaces the current Style.
+- **Players keep exactly one style.** A spin replaces it; there is no collection and no way to
+  re-equip an earlier style except rolling it again.
 - Rarities: Common 55%, Rare 30%, Epic 12%, Legendary 3% (see `Config.Styles`).
 - Spins: start with 10; +1 per round played, +1 per Tubig. Saved in DataStore with the Style.
-- Each Style = passive stat modifiers (speed, stamina, reach) + **Q** and **E** skills.
+- Each Style = passive stat modifiers (speed, stamina, reach) + **Q** and **E** skills + a showcase
+  `pose` (an emote from the character's `Animate` script: wave, point, dance, dance2, dance3, cheer, laugh).
 - Skill kinds: `Dash`, `Blink`, `Haste`, `SecondWind`, `LongArm`, `Slow` (area, enemies only;
   `mult = 0` is a freeze), `Veil` (tag-immune + see-through). Roster lives in `Styles.luau`.
+
+### Environment builders — `FilipinoStreetEnvironment`
+- `BuildStreet`, `BuildHouseRow`, `BuildJeepney`, `BuildBarangayArch`, `BuildSariSariStore`,
+  `BuildUtilityPolesAndWires`, `BuildBanderitas` (share one pole layout), hoop, walls, lighting.
+  Both maps are saved in the place; the builders only run when a map is missing (or by hand in edit mode).

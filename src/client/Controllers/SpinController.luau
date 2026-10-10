@@ -3,7 +3,7 @@
     SpinController.luau
     Hub-only Styles menu (G or the STYLES button):
     - a 3D preview of your own avatar doing the selected style's pose (emotes from your Animate script)
-    - your collection of rolled styles; tap one to preview it (the equipped one is starred)
+    - the roll odds; players keep exactly one style and every spin replaces it
     - SPIN, which shuffles through the roster and reveals the result with its pose
     The SPIN button is Modal so the mouse is free even if the camera is mouse-locked.
 ]]
@@ -16,6 +16,7 @@ local TweenService = game:GetService("TweenService")
 local Types = require(ReplicatedStorage.Shared.Modules.Types)
 local Styles = require(ReplicatedStorage.Shared.Modules.Styles)
 local Remotes = require(ReplicatedStorage.Shared.Modules.Remotes)
+local Config = require(ReplicatedStorage.Shared.Modules.Config)
 local SoundController = require(script.Parent.SoundController)
 
 local SpinController = {}
@@ -31,12 +32,9 @@ local nameLabel: TextLabel
 local rarityLabel: TextLabel
 local descLabel: TextLabel
 local skillsLabel: TextLabel
-local collectionLabel: TextLabel
 local spinButton: TextButton
-local chips: { [string]: TextButton } = {}
 
 local spinning = false
-local previewId: string? = nil -- style shown in the preview; nil = the equipped one
 local avatar: Model? = nil
 local avatarSource: Model? = nil -- the character the preview was copied from
 local poseTracks: { [string]: AnimationTrack } = {}
@@ -45,14 +43,6 @@ local PODIUM_TOP = -3
 
 local function getSpins(): number
     return (player:GetAttribute("Spins") :: number?) or 0
-end
-
-local function getOwned(): { [string]: boolean }
-    local owned = {}
-    for _, id in string.split((player:GetAttribute("Collection") :: string?) or "", ",") do
-        owned[id] = true
-    end
-    return owned
 end
 
 local function equippedId(): string
@@ -135,12 +125,6 @@ local function showStyle(style: Types.StyleDef, withPose: boolean)
     skillsLabel.Text = `[Q] {q.name} ({q.cooldown}s)    [E] {e.name} ({e.cooldown}s)\n`
         .. `Speed x{style.speedMult}  ·  Stamina x{style.staminaMult}  ·  Reach +{style.reachBonus}`
     viewport.BackgroundColor3 = color:Lerp(Color3.new(0, 0, 0), 0.72)
-    for id, chip in chips do
-        local stroke = chip:FindFirstChildOfClass("UIStroke")
-        if stroke then
-            stroke.Enabled = id == style.id
-        end
-    end
     if withPose then
         playPose(style)
     end
@@ -148,34 +132,16 @@ end
 
 local function refresh()
     local spins = getSpins()
-    local owned = getOwned()
-    local equipped = equippedId()
     hintButton.Text = `STYLES  ·  SPINS: {spins}`
 
-    -- The server sets Style/Collection the moment it rolls; keep the result hidden until the reveal.
+    -- The server sets Style the moment it rolls; keep the result hidden until the reveal.
     if spinning then
         spinButton.Text = "ROLLING..."
         spinButton.BackgroundColor3 = Color3.fromRGB(70, 70, 80)
         return
     end
 
-    local count = 0
-    for _, style in Styles.List do
-        local chip = chips[style.id]
-        if owned[style.id] then
-            count += 1
-            chip.Text = if style.id == equipped then `★ {style.name}` else style.name
-            chip.TextColor3 = Color3.new(1, 1, 1)
-            chip.BackgroundColor3 = Styles.RarityColors[style.rarity]:Lerp(Color3.new(0, 0, 0), 0.45)
-        else
-            chip.Text = "???"
-            chip.TextColor3 = Color3.fromRGB(120, 120, 130)
-            chip.BackgroundColor3 = Color3.fromRGB(35, 35, 42)
-        end
-    end
-    collectionLabel.Text = `COLLECTION  {count}/{#Styles.List}  ·  tap a style to preview`
-
-    showStyle(Styles.Get(previewId or equipped), panel.Visible)
+    showStyle(Styles.Get(equippedId()), panel.Visible)
     spinButton.Text = if spins < 1 then "NO SPINS LEFT" else `SPIN  ({spins} left)`
     spinButton.BackgroundColor3 = if spins < 1 then Color3.fromRGB(70, 70, 80) else Color3.fromRGB(230, 60, 60)
 end
@@ -188,7 +154,6 @@ local function setOpen(open: boolean)
         skillBar.Enabled = not open
     end
     if open then
-        previewId = nil
         refresh()
     elseif currentTrack then
         currentTrack:Stop(0)
@@ -199,7 +164,6 @@ end
 local function spin()
     if spinning or getSpins() < 1 then return end
     spinning = true
-    previewId = nil
     refresh()
 
     local result: string? = nil
@@ -315,7 +279,7 @@ local function buildUI()
     podium.Color = Color3.fromRGB(60, 60, 70)
     podium.Parent = worldModel
 
-    -- Right: details, collection, spin
+    -- Right: details, odds, spin
     local info = Instance.new("Frame")
     info.Name = "Info"
     info.Position = UDim2.new(0.42, 6, 0, 12)
@@ -334,43 +298,20 @@ local function buildUI()
     rarityLabel = makeLabel(info, 3, 0.06, Enum.Font.GothamBold, 16)
     descLabel = makeLabel(info, 4, 0.09, Enum.Font.Gotham, 15)
     skillsLabel = makeLabel(info, 5, 0.12, Enum.Font.GothamMedium, 14)
-    collectionLabel = makeLabel(info, 6, 0.05, Enum.Font.GothamBold, 13)
-    collectionLabel.TextColor3 = Color3.fromRGB(170, 170, 185)
-
-    local grid = Instance.new("Frame")
-    grid.LayoutOrder = 7
-    grid.Size = UDim2.fromScale(1, 0.22)
-    grid.BackgroundTransparency = 1
-    grid.Parent = info
-    local gridLayout = Instance.new("UIGridLayout")
-    gridLayout.CellSize = UDim2.new(0.25, -6, 0.5, -6)
-    gridLayout.CellPadding = UDim2.fromOffset(6, 6)
-    gridLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    gridLayout.Parent = grid
-    for i, style in Styles.List do
-        local chip = Instance.new("TextButton")
-        chip.LayoutOrder = i
-        chip.Font = Enum.Font.GothamBold
-        chip.TextScaled = true
-        chip.Parent = grid
-        local chipLimit = Instance.new("UITextSizeConstraint")
-        chipLimit.MaxTextSize = 14
-        chipLimit.Parent = chip
-        Instance.new("UICorner").Parent = chip
-        local selected = Instance.new("UIStroke")
-        selected.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-        selected.Color = Color3.new(1, 1, 1)
-        selected.Thickness = 2
-        selected.Enabled = false
-        selected.Parent = chip
-        chip.Activated:Connect(function()
-            if not spinning and getOwned()[style.id] then
-                previewId = style.id
-                showStyle(style, true)
-            end
-        end)
-        chips[style.id] = chip
+    -- Roll odds, colored by rarity. Players keep one style; every spin replaces it.
+    local odds = makeLabel(info, 6, 0.14, Enum.Font.GothamBold, 14)
+    odds.RichText = true
+    local weights = Config.Styles.RarityWeights :: { [string]: number }
+    local total = 0
+    for _, rarity in Styles.RarityOrder do
+        total += weights[rarity] or 0
     end
+    local parts = {}
+    for _, rarity in Styles.RarityOrder do
+        local percent = math.round((weights[rarity] or 0) / total * 100)
+        table.insert(parts, `<font color="#{Styles.RarityColors[rarity]:ToHex()}">{rarity} {percent}%</font>`)
+    end
+    odds.Text = "ODDS   " .. table.concat(parts, "  ·  ") .. "\nYou keep one style. Each spin replaces it."
 
     spinButton = Instance.new("TextButton")
     spinButton.Name = "SpinButton"
@@ -407,7 +348,6 @@ function SpinController.Init()
     refresh()
     player:GetAttributeChangedSignal("Spins"):Connect(refresh)
     player:GetAttributeChangedSignal("Style"):Connect(refresh)
-    player:GetAttributeChangedSignal("Collection"):Connect(refresh)
 
     UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: boolean)
         if gameProcessed then return end
