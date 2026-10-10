@@ -35,25 +35,49 @@ local PAD_COLORS: { [number]: Color3 } = {
 
 local pads: { Pad } = {}
 
--- Builds the hub plaza (floor, spawn, pads). Also run once in edit mode so it can be decorated by hand.
-function HubService.BuildHub(): Folder
-    local center = Config.Hub.Center
-    local hub = Instance.new("Folder")
+-- Builds the hub as a barangay street (houses, sari-sari store, poles, banderitas, jeepney, welcome
+-- arch) with the queue pads on the road. Built around the origin, then pivoted to Config.Hub.Center.
+-- Also run once in edit mode so it can be decorated by hand.
+function HubService.BuildHub(): Model
+    local hub = Instance.new("Model")
     hub.Name = "Hub"
+    local width, length = 56, 160
+    local halfW, halfL = width / 2, length / 2
 
-    local floor = Instance.new("Part")
-    floor.Name = "PlazaFloor"
-    floor.Size = Vector3.new(160, 1, 160)
-    floor.Position = center
-    floor.Anchored = true
-    floor.Material = Enum.Material.Pavement
-    floor.Color = Color3.fromRGB(120, 115, 110)
-    floor.Parent = hub
+    FilipinoStreetEnvironment.BuildStreet(hub, width, length, 0)
+    FilipinoStreetEnvironment.BuildUtilityPolesAndWires(hub, width, length - 30, 0)
+    FilipinoStreetEnvironment.BuildBanderitas(hub, width, length - 30, 0)
+    -- Store sits down the street (clear of the arch), with the jeepney parked out front
+    FilipinoStreetEnvironment.BuildSariSariStore(hub, Vector3.new(halfW + 16, 0, 20))
+    FilipinoStreetEnvironment.BuildJeepney(hub, CFrame.lookAt(Vector3.new(18, 0, 50), Vector3.new(18, 0, 0)),
+        Color3.fromRGB(30, 110, 200), "PATINTERO - KANTO")
+    FilipinoStreetEnvironment.BuildBarangayArch(hub, CFrame.lookAt(Vector3.new(0, 0, -42), Vector3.new(0, 0, -100)),
+        width + 6, "MALIGAYANG PAGDATING SA BARANGAY PATINTERO")
+
+    -- Houses line both sides and close off both ends (store gap on the right)
+    local houseX, endZ = halfW + 11, halfL + 1
+    FilipinoStreetEnvironment.BuildHouseRow(hub, Vector3.new(-houseX, 0, -halfL), Vector3.new(-houseX, 0, halfL), Vector3.xAxis, 101)
+    FilipinoStreetEnvironment.BuildHouseRow(hub, Vector3.new(houseX, 0, halfL), Vector3.new(houseX, 0, 54), -Vector3.xAxis, 102)
+    FilipinoStreetEnvironment.BuildHouseRow(hub, Vector3.new(houseX, 0, 28), Vector3.new(houseX, 0, -halfL), -Vector3.xAxis, 103)
+    FilipinoStreetEnvironment.BuildHouseRow(hub, Vector3.new(-houseX, 0, endZ), Vector3.new(houseX, 0, endZ), -Vector3.zAxis, 104)
+    FilipinoStreetEnvironment.BuildHouseRow(hub, Vector3.new(houseX, 0, -endZ), Vector3.new(-houseX, 0, -endZ), Vector3.zAxis, 105)
+
+    -- Invisible walls so nobody wanders out through gaps between houses
+    for _, wall in { { Vector3.new(2, 30, length + 4), Vector3.new(-houseX + 1, 15, 0) }, { Vector3.new(2, 30, length + 4), Vector3.new(houseX - 1, 15, 0) },
+        { Vector3.new(width + 24, 30, 2), Vector3.new(0, 15, -endZ + 1) }, { Vector3.new(width + 24, 30, 2), Vector3.new(0, 15, endZ - 1) } } do
+        local barrier = Instance.new("Part")
+        barrier.Name = "Barrier"
+        barrier.Size = wall[1]
+        barrier.Position = wall[2]
+        barrier.Anchored = true
+        barrier.Transparency = 1
+        barrier.Parent = hub
+    end
 
     local spawn = Instance.new("SpawnLocation")
     spawn.Name = "HubSpawn"
     spawn.Size = Vector3.new(10, 1, 10)
-    spawn.Position = center + Vector3.new(0, 0.6, -30)
+    spawn.Position = Vector3.new(0, 0.6, -55)
     spawn.Anchored = true
     spawn.Neutral = true
     spawn.Material = Enum.Material.SmoothPlastic
@@ -64,14 +88,15 @@ function HubService.BuildHub(): Folder
     padFolder.Name = "Pads"
     padFolder.Parent = hub
 
-    local sizes = Config.Hub.PadSizes
-    for i, size in sizes do
-        local x = center.X + (i - (#sizes + 1) / 2) * 26
+    -- Pads in a 2-column grid down the middle of the road
+    for i, size in Config.Hub.PadSizes do
+        local x = if i % 2 == 1 then -13 else 13
+        local z = 5 + math.floor((i - 1) / 2) * 26
         local pad = Instance.new("Part")
         pad.Name = `Pad{size}`
         pad.Shape = Enum.PartType.Cylinder
         pad.Size = Vector3.new(0.4, 16, 16) -- cylinder axis is X; rotated flat below
-        pad.CFrame = CFrame.new(x, center.Y + 0.7, center.Z + 20) * CFrame.Angles(0, 0, math.rad(90))
+        pad.CFrame = CFrame.new(x, 0.2, z) * CFrame.Angles(0, 0, math.rad(90))
         pad.Anchored = true
         pad.CanCollide = false
         pad.Material = Enum.Material.Neon
@@ -99,6 +124,8 @@ function HubService.BuildHub(): Folder
         status.Parent = billboard
     end
 
+    hub.WorldPivot = CFrame.new()
+    hub:PivotTo(CFrame.new(Config.Hub.Center))
     hub.Parent = Workspace
     return hub
 end

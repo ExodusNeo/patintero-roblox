@@ -178,14 +178,19 @@ function FilipinoStreetEnvironment.BuildSariSariStore(parent: Instance, origin: 
 end
 
 -- 3. Utility Poles with Tangled Overhead "Spaghetti" Wires & Streetlamps (Grouped Models)
+-- Shared by poles and banderitas so the flags are always strung between real poles.
+local POLE_HEIGHT = 28
+local function poleLayout(courtWidth: number, courtLength: number): (number, { number })
+    return courtWidth / 2 + 7, { -courtLength / 2, 0, courtLength / 2 }
+end
+
 function FilipinoStreetEnvironment.BuildUtilityPolesAndWires(parent: Instance, courtWidth: number, courtLength: number, centerY: number)
     local polesFolder = Instance.new("Folder")
     polesFolder.Name = "UtilityPoles"
     polesFolder.Parent = parent
 
-    local halfW = courtWidth / 2 + 7
-    local poleZPositions = { -courtLength / 2, 0, courtLength / 2 }
-    local poleHeight = 28
+    local halfW, poleZPositions = poleLayout(courtWidth, courtLength)
+    local poleHeight = POLE_HEIGHT
 
     local leftPoles: { Vector3 } = {}
     local rightPoles: { Vector3 } = {}
@@ -270,37 +275,47 @@ function FilipinoStreetEnvironment.BuildBanderitas(parent: Instance, courtWidth:
         Color3.fromRGB(250, 250, 250), -- White
     }
 
-    local halfW = courtWidth / 2 + 5
-    local zIntervals = { -courtLength * 0.35, -courtLength * 0.15, courtLength * 0.15, courtLength * 0.35 }
+    -- Rows zig-zag between the poles (left pole i -> right pole i+1 and back), tied just under the cross-arms.
+    local halfW, poleZ = poleLayout(courtWidth, courtLength)
+    local tieY = centerY + POLE_HEIGHT - 5
+    local rows: { { Vector3 } } = {}
+    for i = 1, #poleZ - 1 do
+        table.insert(rows, { Vector3.new(-halfW, tieY, poleZ[i]), Vector3.new(halfW, tieY, poleZ[i + 1]) })
+        table.insert(rows, { Vector3.new(halfW, tieY, poleZ[i]), Vector3.new(-halfW, tieY, poleZ[i + 1]) })
+    end
 
-    for rowIndex, z in ipairs(zIntervals) do
+    for rowIndex, ends in rows do
         local rowModel = Instance.new("Model")
         rowModel.Name = string.format("BanderitasRow_%d", rowIndex)
-        rowModel.Parent = banderitasFolder
 
-        local pLeft = Vector3.new(-halfW, centerY + 20, z)
-        local pRight = Vector3.new(halfW, centerY + 20, z)
-        local totalSpan = (pRight - pLeft).Magnitude
-        local steps = math.floor(totalSpan / 2.2)
-
-        for step = 0, steps do
+        local pStart, pEnd = ends[1], ends[2]
+        local direction = (pEnd - pStart).Unit
+        local steps = math.floor((pEnd - pStart).Magnitude / 2.2)
+        local previous = pStart
+        for step = 1, steps do
             local alpha = step / steps
-            local pos = pLeft:Lerp(pRight, alpha)
-            -- Catenary curve droop
-            local droop = math.sin(alpha * math.pi) * 3.5
-            pos = pos - Vector3.new(0, droop, 0)
+            local pos = pStart:Lerp(pEnd, alpha) - Vector3.new(0, math.sin(alpha * math.pi) * 4, 0) -- catenary droop
 
-            local flag = Instance.new("WedgePart")
-            flag.Name = "Flag"
-            flag.Size = Vector3.new(0.1, 1.4, 1.2)
-            flag.CFrame = CFrame.new(pos) * CFrame.Angles(math.rad(180), math.rad(90), 0)
-            flag.Material = Enum.Material.SmoothPlastic
-            flag.Color = colors[(step % #colors) + 1]
-            flag.Anchored = true
-            flag.CanCollide = false
-            flag.CastShadow = false
-            flag.Parent = rowModel
+            -- String segment from the previous point; flags hang just below it
+            local cord = createPart("String", Vector3.new(0.08, 0.08, (pos - previous).Magnitude),
+                CFrame.lookAt((previous + pos) / 2, pos), Enum.Material.Fabric, Color3.fromRGB(235, 230, 215), rowModel, false)
+            cord.CastShadow = false
+            previous = pos
+
+            if step < steps then
+                local flag = Instance.new("WedgePart")
+                flag.Name = "Flag"
+                flag.Size = Vector3.new(0.1, 1.4, 1.2)
+                flag.CFrame = CFrame.lookAt(pos - Vector3.new(0, 0.75, 0), pos - Vector3.new(0, 0.75, 0) + direction) * CFrame.Angles(math.pi, 0, 0)
+                flag.Material = Enum.Material.SmoothPlastic
+                flag.Color = colors[(step % #colors) + 1]
+                flag.Anchored = true
+                flag.CanCollide = false
+                flag.CastShadow = false
+                flag.Parent = rowModel
+            end
         end
+        rowModel.Parent = banderitasFolder
     end
 end
 
@@ -375,6 +390,185 @@ function FilipinoStreetEnvironment.BuildPerimeterWalls(parent: Instance, courtWi
     multaText.TextColor3 = Color3.fromRGB(40, 40, 40)
     multaText.TextScaled = true
     multaText.Parent = sGui
+end
+
+-- Asphalt street with raised sidewalks and painted curbs, centered on the origin along Z.
+function FilipinoStreetEnvironment.BuildStreet(parent: Instance, width: number, length: number, centerY: number)
+    createPart("StreetAsphalt", Vector3.new(width + 4, 2, length), CFrame.new(0, centerY - 1, 0),
+        Enum.Material.Asphalt, Color3.fromRGB(50, 50, 54), parent)
+
+    local sidewalkWidth, sidewalkHeight = 8, 0.8
+    for _, side in { -1, 1 } do
+        local model = Instance.new("Model")
+        model.Name = if side < 0 then "SidewalkLeft" else "SidewalkRight"
+        local posX = side * (width / 2 + sidewalkWidth / 2 + 2)
+        local walkway = createPart("Walkway", Vector3.new(sidewalkWidth, sidewalkHeight + 2, length),
+            CFrame.new(posX, centerY + sidewalkHeight / 2 - 1, 0), Enum.Material.Concrete, Color3.fromRGB(155, 155, 160), model)
+        model.PrimaryPart = walkway
+        createPart("Curb", Vector3.new(0.6, sidewalkHeight + 0.2, length),
+            CFrame.new(posX - side * sidewalkWidth / 2, centerY + sidewalkHeight / 2, 0),
+            Enum.Material.Concrete, Color3.fromRGB(220, 180, 40), model) -- weathered yellow curb
+        model.Parent = parent
+    end
+end
+
+local HOUSE_WALLS = {
+    Color3.fromRGB(236, 196, 120), Color3.fromRGB(150, 200, 170), Color3.fromRGB(240, 170, 150),
+    Color3.fromRGB(170, 190, 230), Color3.fromRGB(245, 235, 200), Color3.fromRGB(215, 160, 200),
+}
+local HOUSE_UPPER = {
+    Color3.fromRGB(120, 85, 60), Color3.fromRGB(230, 230, 220), Color3.fromRGB(90, 140, 120),
+    Color3.fromRGB(200, 110, 70), Color3.fromRGB(110, 120, 160),
+}
+local ROOF_COLORS = {
+    Color3.fromRGB(150, 70, 45), Color3.fromRGB(110, 120, 125), Color3.fromRGB(60, 110, 150), Color3.fromRGB(70, 120, 80),
+}
+
+local function decor(name: string, size: Vector3, cf: CFrame, material: Enum.Material, color: Color3, parent: Instance): Part
+    local part = createPart(name, size, cf, material, color, parent, false)
+    part.CastShadow = false
+    part.CanQuery = false
+    part.CanTouch = false
+    return part
+end
+
+-- Grilled window: dark glass with vertical security bars (rehas).
+local function window(parent: Instance, cf: CFrame, w: number, h: number)
+    decor("Window", Vector3.new(w, h, 0.3), cf, Enum.Material.Glass, Color3.fromRGB(40, 50, 60), parent)
+    for i = 1, 3 do
+        local x = -w / 2 + i * w / 4
+        decor("Grill", Vector3.new(0.15, h, 0.15), cf * CFrame.new(x, 0, -0.25), Enum.Material.Metal, Color3.fromRGB(30, 30, 30), parent)
+    end
+end
+
+-- One "bahay": hollow-block ground floor, painted upper floor (most houses), grilled windows and a yero roof.
+-- `cf` sits at the bottom-center of the front wall; LookVector points at the street.
+local function buildHouse(parent: Instance, cf: CFrame, width: number, rng: Random)
+    local house = Instance.new("Model")
+    house.Name = "Bahay"
+    local depth = 14
+    local groundH = 9
+    local upperH = if rng:NextNumber() < 0.75 then 8 else 0
+    local wall = HOUSE_WALLS[rng:NextInteger(1, #HOUSE_WALLS)]
+
+    local body = createPart("GroundFloor", Vector3.new(width, groundH, depth), cf * CFrame.new(0, groundH / 2, depth / 2),
+        Enum.Material.Concrete, wall, house)
+    house.PrimaryPart = body
+    decor("Door", Vector3.new(3.5, 7, 0.3), cf * CFrame.new(-width / 4, 3.5, -0.1), Enum.Material.Wood, Color3.fromRGB(90, 60, 40), house)
+    window(house, cf * CFrame.new(width / 4, 5, -0.1), 4, 3.5)
+
+    local top = groundH
+    if upperH > 0 then
+        createPart("UpperFloor", Vector3.new(width, upperH, depth), cf * CFrame.new(0, groundH + upperH / 2, depth / 2 - 1),
+            Enum.Material.WoodPlanks, HOUSE_UPPER[rng:NextInteger(1, #HOUSE_UPPER)], house)
+        window(house, cf * CFrame.new(-width / 4, groundH + upperH / 2, -1.1), 4, 3.5)
+        window(house, cf * CFrame.new(width / 4, groundH + upperH / 2, -1.1), 4, 3.5)
+        top += upperH
+    else
+        -- Single-storey houses get a small yero awning over the door
+        decor("Awning", Vector3.new(width * 0.6, 0.3, 3), cf * CFrame.new(-width / 6, 7.8, -1.4) * CFrame.Angles(math.rad(-15), 0, 0),
+            Enum.Material.CorrodedMetal, ROOF_COLORS[rng:NextInteger(1, #ROOF_COLORS)], house)
+    end
+
+    createPart("YeroRoof", Vector3.new(width + 1, 0.5, depth + 3), cf * CFrame.new(0, top + 1.6, depth / 2) * CFrame.Angles(math.rad(-12), 0, 0),
+        Enum.Material.CorrodedMetal, ROOF_COLORS[rng:NextInteger(1, #ROOF_COLORS)], house)
+
+    house.Parent = parent
+end
+
+-- Row of houses side by side from `fromPos` to `toPos`, fronts facing `facing` (a flat direction).
+function FilipinoStreetEnvironment.BuildHouseRow(parent: Instance, fromPos: Vector3, toPos: Vector3, facing: Vector3, seed: number): Model
+    local row = Instance.new("Model")
+    row.Name = "HouseRow"
+    local rng = Random.new(seed)
+    local direction = (toPos - fromPos).Unit
+    local total = (toPos - fromPos).Magnitude
+    local along = 0
+    while total - along >= 8 do
+        local width = math.min(rng:NextInteger(12, 18), total - along)
+        local center = fromPos + direction * (along + width / 2)
+        buildHouse(row, CFrame.lookAt(center, center + facing), width - 0.4, rng)
+        along += width
+    end
+    row.Parent = parent
+    return row
+end
+
+-- Classic passenger jeepney. `cf` = ground center, LookVector = front.
+function FilipinoStreetEnvironment.BuildJeepney(parent: Instance, cf: CFrame, bodyColor: Color3?, routeText: string?): Model
+    local jeep = Instance.new("Model")
+    jeep.Name = "Jeepney"
+    local paint = bodyColor or Color3.fromRGB(200, 40, 40)
+    local chrome = Color3.fromRGB(200, 205, 210)
+
+    jeep.PrimaryPart = createPart("Chassis", Vector3.new(7, 1, 22), cf * CFrame.new(0, 2, 0), Enum.Material.Metal, Color3.fromRGB(40, 40, 45), jeep)
+    createPart("Cabin", Vector3.new(7, 5, 14), cf * CFrame.new(0, 5, 3), Enum.Material.SmoothPlastic, paint, jeep)
+    createPart("Hood", Vector3.new(6.4, 3, 6), cf * CFrame.new(0, 3.9, -7), Enum.Material.Metal, chrome, jeep)
+    createPart("Roof", Vector3.new(7.6, 0.6, 20), cf * CFrame.new(0, 8.4, 1), Enum.Material.Metal, Color3.fromRGB(235, 235, 230), jeep)
+    decor("Windshield", Vector3.new(6.4, 2.6, 0.3), cf * CFrame.new(0, 6.8, -4.2), Enum.Material.Glass, Color3.fromRGB(120, 150, 170), jeep).Transparency = 0.4
+    decor("Grille", Vector3.new(5, 2, 0.3), cf * CFrame.new(0, 3.6, -10.1), Enum.Material.DiamondPlate, chrome, jeep)
+    decor("Bumper", Vector3.new(7.4, 0.8, 0.6), cf * CFrame.new(0, 2.2, -10.6), Enum.Material.Metal, chrome, jeep)
+    for _, side in { -1, 1 } do
+        decor("Headlight", Vector3.new(1, 1, 0.4), cf * CFrame.new(side * 2.4, 4.3, -10.1), Enum.Material.Neon, Color3.fromRGB(255, 240, 180), jeep)
+        decor("Stripe", Vector3.new(0.2, 0.8, 14), cf * CFrame.new(side * 3.55, 4.4, 3), Enum.Material.SmoothPlastic, Color3.fromRGB(255, 210, 40), jeep)
+        decor("SideWindows", Vector3.new(0.2, 1.6, 12), cf * CFrame.new(side * 3.55, 6.6, 3), Enum.Material.Glass, Color3.fromRGB(30, 35, 40), jeep)
+        decor("HoodHorse", Vector3.new(0.3, 1.2, 0.8), cf * CFrame.new(side * 1.6, 5.9, -8.5), Enum.Material.Metal, chrome, jeep)
+        for _, z in { -7, 7 } do
+            createPart("Wheel", Vector3.new(1.4, 3.2, 3.2), cf * CFrame.new(side * 3.6, 1.6, z),
+                Enum.Material.SmoothPlastic, Color3.fromRGB(25, 25, 25), jeep).Shape = Enum.PartType.Cylinder
+        end
+    end
+    decor("RearStep", Vector3.new(5, 0.4, 1.2), cf * CFrame.new(0, 1.6, 10.6), Enum.Material.DiamondPlate, chrome, jeep)
+
+    -- Route sign above the windshield
+    local sign = decor("RouteSign", Vector3.new(6.4, 1.2, 0.3), cf * CFrame.new(0, 9.4, -8.6), Enum.Material.SmoothPlastic, Color3.fromRGB(250, 250, 245), jeep)
+    local gui = Instance.new("SurfaceGui")
+    gui.Face = Enum.NormalId.Front
+    gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+    gui.PixelsPerStud = 40
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.fromScale(1, 1)
+    label.BackgroundTransparency = 1
+    label.Font = Enum.Font.GothamBlack
+    label.TextScaled = true
+    label.TextColor3 = Color3.fromRGB(200, 30, 30)
+    label.Text = routeText or "BACLARAN - KANTO"
+    label.Parent = gui
+    gui.Parent = sign
+
+    jeep.Parent = parent
+    return jeep
+end
+
+-- Barangay welcome arch spanning a street. `cf` = ground center, LookVector = side the text faces.
+function FilipinoStreetEnvironment.BuildBarangayArch(parent: Instance, cf: CFrame, span: number, text: string): Model
+    local arch = Instance.new("Model")
+    arch.Name = "BarangayArch"
+    local height = 18
+    for _, side in { -1, 1 } do
+        createPart("Pillar", Vector3.new(3, height, 3), cf * CFrame.new(side * span / 2, height / 2, 0), Enum.Material.Concrete, Color3.fromRGB(240, 235, 220), arch)
+    end
+    local beam = createPart("Beam", Vector3.new(span + 3, 4, 2), cf * CFrame.new(0, height + 2, 0), Enum.Material.SmoothPlastic, Color3.fromRGB(30, 80, 160), arch)
+    arch.PrimaryPart = beam
+
+    for _, face in { Enum.NormalId.Front, Enum.NormalId.Back } do
+        local gui = Instance.new("SurfaceGui")
+        gui.Face = face
+        gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+        gui.PixelsPerStud = 25
+        local label = Instance.new("TextLabel")
+        label.Size = UDim2.fromScale(1, 1)
+        label.BackgroundTransparency = 1
+        label.Font = Enum.Font.GothamBlack
+        label.TextScaled = true
+        label.TextColor3 = Color3.fromRGB(255, 215, 0)
+        label.Text = text
+        label.Parent = gui
+        gui.Parent = beam
+    end
+
+    arch.Parent = parent
+    return arch
 end
 
 return FilipinoStreetEnvironment
