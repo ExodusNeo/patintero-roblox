@@ -20,6 +20,11 @@ rollable **Styles** (rarity-weighted, each with a passive + two skills) in the s
   Never `rojo serve` over Studio without syncing first.
 - Edits only persist when the user saves the place in Studio (Ctrl+S / publish). Remind them after big changes.
 - Verify every gameplay change with a playtest: `start_stop_play` → `get_console_output` → stop.
+- **Multiplayer tests** (no clicking needed): from Edit, `task.spawn` a call to
+  `StudioTestService:ExecuteMultiplayerTestAsync(2, args)`. The server and each client then appear in
+  `list_roblox_studios` (name `null`; `get_studio_state` shows which is focused on Server).
+  Drive them with `execute_luau` (Server/Client), end with `StudioTestService:EndTest(...)` on the server.
+  Manual equivalent: testing dropdown → **Server & Clients** → Play (F7) → End Session.
 - `.codegraph/` (CodeGraph index) only reflects `src/` on disk; use it for disk-side work only.
 
 ### Two places, one place file
