@@ -58,6 +58,7 @@ local Config = {
         MinPlayersToStart = if RunService:IsStudio() then 1 else 2,
         IntermissionTime = 10,
         ArrivalTimeout = 20, -- match server: max wait for the rest of the hub's party
+        JoinSettleTime = 5, -- start only after no one has joined for this long
         CountdownTime = 3,
         RoundDuration = 90,
         PointsForTubig = 5,

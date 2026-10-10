@@ -46,8 +46,10 @@ local lastLineSwitch: { [Player]: number } = {}
 
 -- Party size the hub sent (teleport data is client-visible, so it's only a wait hint).
 local expectedPlayers = Config.Match.MinPlayersToStart
+local lastJoinTime = 0
 
 local function readJoinData(player: Player)
+    lastJoinTime = os.clock()
     local data = player:GetJoinData().TeleportData
     if typeof(data) == "table" and typeof(data.expectedPlayers) == "number" and data.expectedPlayers == data.expectedPlayers then
         expectedPlayers = math.clamp(math.floor(data.expectedPlayers), 1, 8)
@@ -276,7 +278,9 @@ function MatchService.Init()
                 task.wait(1)
             end
             local arrivalDeadline = os.clock() + Config.Match.ArrivalTimeout
-            while #Players:GetPlayers() < expectedPlayers and os.clock() < arrivalDeadline do
+            -- Also wait until joins settle, so players loading a few seconds apart all get a team.
+            while (#Players:GetPlayers() < expectedPlayers or os.clock() - lastJoinTime < Config.Match.JoinSettleTime)
+                and os.clock() < arrivalDeadline do
                 task.wait(0.5)
             end
 
