@@ -178,14 +178,19 @@ function FilipinoStreetEnvironment.BuildSariSariStore(parent: Instance, origin: 
 end
 
 -- 3. Utility Poles with Tangled Overhead "Spaghetti" Wires & Streetlamps (Grouped Models)
+-- Shared by poles and banderitas so the flags are always strung between real poles.
+local POLE_HEIGHT = 28
+local function poleLayout(courtWidth: number, courtLength: number): (number, { number })
+    return courtWidth / 2 + 7, { -courtLength / 2, 0, courtLength / 2 }
+end
+
 function FilipinoStreetEnvironment.BuildUtilityPolesAndWires(parent: Instance, courtWidth: number, courtLength: number, centerY: number)
     local polesFolder = Instance.new("Folder")
     polesFolder.Name = "UtilityPoles"
     polesFolder.Parent = parent
 
-    local halfW = courtWidth / 2 + 7
-    local poleZPositions = { -courtLength / 2, 0, courtLength / 2 }
-    local poleHeight = 28
+    local halfW, poleZPositions = poleLayout(courtWidth, courtLength)
+    local poleHeight = POLE_HEIGHT
 
     local leftPoles: { Vector3 } = {}
     local rightPoles: { Vector3 } = {}
@@ -270,37 +275,47 @@ function FilipinoStreetEnvironment.BuildBanderitas(parent: Instance, courtWidth:
         Color3.fromRGB(250, 250, 250), -- White
     }
 
-    local halfW = courtWidth / 2 + 5
-    local zIntervals = { -courtLength * 0.35, -courtLength * 0.15, courtLength * 0.15, courtLength * 0.35 }
+    -- Rows zig-zag between the poles (left pole i -> right pole i+1 and back), tied just under the cross-arms.
+    local halfW, poleZ = poleLayout(courtWidth, courtLength)
+    local tieY = centerY + POLE_HEIGHT - 5
+    local rows: { { Vector3 } } = {}
+    for i = 1, #poleZ - 1 do
+        table.insert(rows, { Vector3.new(-halfW, tieY, poleZ[i]), Vector3.new(halfW, tieY, poleZ[i + 1]) })
+        table.insert(rows, { Vector3.new(halfW, tieY, poleZ[i]), Vector3.new(-halfW, tieY, poleZ[i + 1]) })
+    end
 
-    for rowIndex, z in ipairs(zIntervals) do
+    for rowIndex, ends in rows do
         local rowModel = Instance.new("Model")
         rowModel.Name = string.format("BanderitasRow_%d", rowIndex)
-        rowModel.Parent = banderitasFolder
 
-        local pLeft = Vector3.new(-halfW, centerY + 20, z)
-        local pRight = Vector3.new(halfW, centerY + 20, z)
-        local totalSpan = (pRight - pLeft).Magnitude
-        local steps = math.floor(totalSpan / 2.2)
-
-        for step = 0, steps do
+        local pStart, pEnd = ends[1], ends[2]
+        local direction = (pEnd - pStart).Unit
+        local steps = math.floor((pEnd - pStart).Magnitude / 2.2)
+        local previous = pStart
+        for step = 1, steps do
             local alpha = step / steps
-            local pos = pLeft:Lerp(pRight, alpha)
-            -- Catenary curve droop
-            local droop = math.sin(alpha * math.pi) * 3.5
-            pos = pos - Vector3.new(0, droop, 0)
+            local pos = pStart:Lerp(pEnd, alpha) - Vector3.new(0, math.sin(alpha * math.pi) * 4, 0) -- catenary droop
 
-            local flag = Instance.new("WedgePart")
-            flag.Name = "Flag"
-            flag.Size = Vector3.new(0.1, 1.4, 1.2)
-            flag.CFrame = CFrame.new(pos) * CFrame.Angles(math.rad(180), math.rad(90), 0)
-            flag.Material = Enum.Material.SmoothPlastic
-            flag.Color = colors[(step % #colors) + 1]
-            flag.Anchored = true
-            flag.CanCollide = false
-            flag.CastShadow = false
-            flag.Parent = rowModel
+            -- String segment from the previous point; flags hang just below it
+            local cord = createPart("String", Vector3.new(0.08, 0.08, (pos - previous).Magnitude),
+                CFrame.lookAt((previous + pos) / 2, pos), Enum.Material.Fabric, Color3.fromRGB(235, 230, 215), rowModel, false)
+            cord.CastShadow = false
+            previous = pos
+
+            if step < steps then
+                local flag = Instance.new("WedgePart")
+                flag.Name = "Flag"
+                flag.Size = Vector3.new(0.1, 1.4, 1.2)
+                flag.CFrame = CFrame.lookAt(pos - Vector3.new(0, 0.75, 0), pos - Vector3.new(0, 0.75, 0) + direction) * CFrame.Angles(math.pi, 0, 0)
+                flag.Material = Enum.Material.SmoothPlastic
+                flag.Color = colors[(step % #colors) + 1]
+                flag.Anchored = true
+                flag.CanCollide = false
+                flag.CastShadow = false
+                flag.Parent = rowModel
+            end
         end
+        rowModel.Parent = banderitasFolder
     end
 end
 

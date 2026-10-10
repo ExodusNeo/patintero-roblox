@@ -47,7 +47,8 @@ function HubService.BuildHub(): Model
     FilipinoStreetEnvironment.BuildStreet(hub, width, length, 0)
     FilipinoStreetEnvironment.BuildUtilityPolesAndWires(hub, width, length - 30, 0)
     FilipinoStreetEnvironment.BuildBanderitas(hub, width, length - 30, 0)
-    FilipinoStreetEnvironment.BuildSariSariStore(hub, Vector3.new(halfW + 16, 0, -40))
+    -- Store sits down the street (clear of the arch), with the jeepney parked out front
+    FilipinoStreetEnvironment.BuildSariSariStore(hub, Vector3.new(halfW + 16, 0, 20))
     FilipinoStreetEnvironment.BuildJeepney(hub, CFrame.lookAt(Vector3.new(18, 0, 50), Vector3.new(18, 0, 0)),
         Color3.fromRGB(30, 110, 200), "PATINTERO - KANTO")
     FilipinoStreetEnvironment.BuildBarangayArch(hub, CFrame.lookAt(Vector3.new(0, 0, -42), Vector3.new(0, 0, -100)),
@@ -56,8 +57,8 @@ function HubService.BuildHub(): Model
     -- Houses line both sides and close off both ends (store gap on the right)
     local houseX, endZ = halfW + 11, halfL + 1
     FilipinoStreetEnvironment.BuildHouseRow(hub, Vector3.new(-houseX, 0, -halfL), Vector3.new(-houseX, 0, halfL), Vector3.xAxis, 101)
-    FilipinoStreetEnvironment.BuildHouseRow(hub, Vector3.new(houseX, 0, halfL), Vector3.new(houseX, 0, -6), -Vector3.xAxis, 102)
-    FilipinoStreetEnvironment.BuildHouseRow(hub, Vector3.new(houseX, 0, -32), Vector3.new(houseX, 0, -halfL), -Vector3.xAxis, 103)
+    FilipinoStreetEnvironment.BuildHouseRow(hub, Vector3.new(houseX, 0, halfL), Vector3.new(houseX, 0, 54), -Vector3.xAxis, 102)
+    FilipinoStreetEnvironment.BuildHouseRow(hub, Vector3.new(houseX, 0, 28), Vector3.new(houseX, 0, -halfL), -Vector3.xAxis, 103)
     FilipinoStreetEnvironment.BuildHouseRow(hub, Vector3.new(-houseX, 0, endZ), Vector3.new(houseX, 0, endZ), -Vector3.zAxis, 104)
     FilipinoStreetEnvironment.BuildHouseRow(hub, Vector3.new(houseX, 0, -endZ), Vector3.new(-houseX, 0, -endZ), Vector3.zAxis, 105)
 
