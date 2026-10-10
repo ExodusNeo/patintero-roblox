@@ -116,7 +116,7 @@ local function onSpin(player: Player): string?
     local style = Styles.Roll(rng)
     player:SetAttribute("Spins", spins - 1)
     player:SetAttribute("Style", style.id)
-    lastCast[player] = nil -- fresh style, fresh cooldowns
+    lastCast[player] = nil -- fresh style, fresh cooldowns (the old style is gone: one style per player)
     return style.id
 end
 

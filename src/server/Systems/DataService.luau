@@ -1,8 +1,8 @@
 --!strict
 --[[
     DataService.luau
-    Loads and saves each player's Spins + Style. The live values are the Player attributes
-    `Spins` and `Style` (owned by StyleService); this service only persists them.
+    Loads and saves each player's Spins + Style (players keep exactly one style). The live values are
+    the Player attributes `Spins` and `Style` (owned by StyleService); this service only persists them.
     shortcut: no session locking (last write wins across servers); move to ProfileStore if trading/paid spins are added.
 ]]
 

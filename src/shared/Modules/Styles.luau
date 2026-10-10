@@ -23,7 +23,7 @@ Styles.RarityColors = table.freeze({
 
 local list: { Types.StyleDef } = {
     {
-        id = "Tsinelas", name = "Tsinelas", rarity = "Common",
+        id = "Tsinelas", name = "Tsinelas", rarity = "Common", pose = "wave",
         description = "Light on your feet. Slipper-fast bursts.",
         speedMult = 1.05, staminaMult = 1, reachBonus = 0,
         skills = {
@@ -32,7 +32,7 @@ local list: { Types.StyleDef } = {
         },
     },
     {
-        id = "Kanto", name = "Kanto", rarity = "Common",
+        id = "Kanto", name = "Kanto", rarity = "Common", pose = "laugh",
         description = "Street-corner endurance. Never runs out of breath.",
         speedMult = 1, staminaMult = 1.25, reachBonus = 0,
         skills = {
@@ -41,7 +41,7 @@ local list: { Types.StyleDef } = {
         },
     },
     {
-        id = "Bantay", name = "Bantay", rarity = "Common",
+        id = "Bantay", name = "Bantay", rarity = "Common", pose = "point",
         description = "Born to guard. Longer arms, longer reach.",
         speedMult = 1, staminaMult = 1, reachBonus = 1,
         skills = {
@@ -50,7 +50,7 @@ local list: { Types.StyleDef } = {
         },
     },
     {
-        id = "Sipa", name = "Sipa", rarity = "Rare",
+        id = "Sipa", name = "Sipa", rarity = "Rare", pose = "dance2",
         description = "Hop past the line before anyone blinks.",
         speedMult = 1.05, staminaMult = 1, reachBonus = 0,
         skills = {
@@ -59,7 +59,7 @@ local list: { Types.StyleDef } = {
         },
     },
     {
-        id = "Tumbang", name = "Tumbang", rarity = "Rare",
+        id = "Tumbang", name = "Tumbang", rarity = "Rare", pose = "cheer",
         description = "Knock the can, scatter the crowd.",
         speedMult = 1, staminaMult = 1.1, reachBonus = 0.5,
         skills = {
@@ -68,7 +68,7 @@ local list: { Types.StyleDef } = {
         },
     },
     {
-        id = "Habagat", name = "Habagat", rarity = "Epic",
+        id = "Habagat", name = "Habagat", rarity = "Epic", pose = "dance3",
         description = "Monsoon wind. Slips through gaps, drags enemies down.",
         speedMult = 1.1, staminaMult = 1.1, reachBonus = 0,
         skills = {
@@ -77,7 +77,7 @@ local list: { Types.StyleDef } = {
         },
     },
     {
-        id = "Anino", name = "Anino", rarity = "Epic",
+        id = "Anino", name = "Anino", rarity = "Epic", pose = "dance",
         description = "A shadow on the street. Can't tag what you can't touch.",
         speedMult = 1.05, staminaMult = 1, reachBonus = 0,
         skills = {
@@ -86,7 +86,7 @@ local list: { Types.StyleDef } = {
         },
     },
     {
-        id = "Bathala", name = "Bathala", rarity = "Legendary",
+        id = "Bathala", name = "Bathala", rarity = "Legendary", pose = "cheer",
         description = "The street bows. Time stops for everyone but you.",
         speedMult = 1.1, staminaMult = 1.2, reachBonus = 1,
         skills = {
