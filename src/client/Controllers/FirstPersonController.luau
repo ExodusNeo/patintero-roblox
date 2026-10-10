@@ -29,17 +29,11 @@ local isSliding = false
 local bobTimer = 0
 local currentCameraDip = 0
 
-local function lockFirstPerson(character: Model)
+-- Menus free the mouse with a Modal GuiButton (see SpinController).
+local function lockFirstPerson()
     player.CameraMode = Enum.CameraMode.LockFirstPerson
     player.CameraMaxZoomDistance = 0.5
     player.CameraMinZoomDistance = 0.5
-
-    -- Keep arms visible for first-person athletic immersion
-    for _, part in ipairs(character:GetDescendants()) do
-        if part:IsA("BasePart") and (part.Name == "Head" or part.Name == "UpperTorso" or part.Name == "Torso") then
-            part.LocalTransparencyModifier = 0
-        end
-    end
 end
 
 function FirstPersonController.SetSprinting(sprinting: boolean)
@@ -63,12 +57,8 @@ end
 function FirstPersonController.Init()
     camera.FieldOfView = BASE_FOV
 
-    if player.Character then
-        lockFirstPerson(player.Character)
-    end
-    player.CharacterAdded:Connect(function(character)
-        lockFirstPerson(character)
-    end)
+    lockFirstPerson()
+    player.CharacterAdded:Connect(lockFirstPerson)
 
     -- RenderStepped loop for head bobbing, slide dip, and camera tilt
     RunService.RenderStepped:Connect(function(deltaTime: number)

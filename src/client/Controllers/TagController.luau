@@ -8,14 +8,16 @@
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
-local UserInputService = game:GetService("UserInputService")
+local ContextActionService = game:GetService("ContextActionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 
 local Types = require(ReplicatedStorage.Shared.Modules.Types)
 local Config = require(ReplicatedStorage.Shared.Modules.Config)
 local Remotes = require(ReplicatedStorage.Shared.Modules.Remotes)
+local Styles = require(ReplicatedStorage.Shared.Modules.Styles)
 local SoundController = require(script.Parent.SoundController)
+local TouchLayout = require(script.Parent.TouchLayout)
 
 local TagController = {}
 
@@ -33,15 +35,17 @@ local function findTaggablePasser(): Player?
     if not root then return nil end
 
     local bestPlayer: Player? = nil
-    local bestDistance = Config.Tagging.BaseReachDistance
+    local style = Styles.Get(player:GetAttribute("Style") :: string?)
+    local activeReach = (character:GetAttribute("ReachBonus") :: number?) or 0
+    local bestDistance = Config.Tagging.BaseReachDistance + style.reachBonus + activeReach
 
     -- Check all other players in the game
     for _, otherPlayer in ipairs(Players:GetPlayers()) do
-        if otherPlayer == player then continue end
+        if otherPlayer == player or otherPlayer:GetAttribute("Team") ~= "Passers" then continue end
 
         local otherChar = otherPlayer.Character
         local otherRoot = if otherChar then otherChar:FindFirstChild("HumanoidRootPart") :: BasePart? else nil
-        if not otherRoot then continue end
+        if not otherRoot or (otherChar :: Model):GetAttribute("TagImmune") then continue end
 
         local toTarget = otherRoot.Position - root.Position
         local distance = toTarget.Magnitude
@@ -87,19 +91,42 @@ local function triggerTagAttempt()
     end
 end
 
+-- Guard-only controls (with touch buttons): Tag and Line Hop. Unbound for Passers so they
+-- don't see buttons they can't use.
+local function setGuardControls(enabled: boolean)
+    if not enabled then
+        ContextActionService:UnbindAction("Tag")
+        ContextActionService:UnbindAction("SwitchLine")
+        return
+    end
+
+    ContextActionService:BindAction("Tag", function(_, inputState: Enum.UserInputState)
+        if inputState == Enum.UserInputState.Begin then
+            triggerTagAttempt()
+        end
+        return Enum.ContextActionResult.Pass
+    end, true, Enum.UserInputType.MouseButton1, Enum.KeyCode.F, Enum.KeyCode.ButtonR2)
+    ContextActionService:SetTitle("Tag", "TAG")
+    TouchLayout.place("Tag")
+
+    ContextActionService:BindAction("SwitchLine", function(_, inputState: Enum.UserInputState)
+        if inputState == Enum.UserInputState.Begin then
+            Remotes.GetEvent("SwitchLine"):FireServer()
+        end
+        return Enum.ContextActionResult.Pass
+    end, true, Enum.KeyCode.R, Enum.KeyCode.ButtonR1)
+    ContextActionService:SetTitle("SwitchLine", "HOP")
+    TouchLayout.place("SwitchLine")
+end
+
 function TagController.Init()
     -- Listen to player role updates
     local playerStateEvent = Remotes.GetEvent("PlayerStateUpdated")
     playerStateEvent.OnClientEvent:Connect(function(state: Types.PlayerMatchState)
-        isGuard = (state.team == "Guards")
-    end)
-
-    -- Tag input: Left click or F key
-    UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: boolean)
-        if gameProcessed then return end
-
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.KeyCode == Enum.KeyCode.F then
-            triggerTagAttempt()
+        local nowGuard = state.team == "Guards"
+        if nowGuard ~= isGuard then
+            isGuard = nowGuard
+            setGuardControls(isGuard)
         end
     end)
 

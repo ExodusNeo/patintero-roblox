@@ -15,6 +15,7 @@ local Config = require(ReplicatedStorage.Shared.Modules.Config)
 local CourtGeometry = require(ReplicatedStorage.Shared.Modules.CourtGeometry)
 local Remotes = require(ReplicatedStorage.Shared.Modules.Remotes)
 local PlayerStateService = require(script.Parent.PlayerStateService)
+local StyleService = require(script.Parent.StyleService)
 
 local TagService = {}
 local lastTagTimestamp: { [Player]: number } = {}
@@ -88,6 +89,10 @@ function TagService.Init()
             return
         end
 
+        if StyleService.IsTagImmune(targetChar) then
+            return
+        end
+
         local taggerRoot = taggerChar:FindFirstChild("HumanoidRootPart") :: BasePart?
         local targetRoot = targetChar:FindFirstChild("HumanoidRootPart") :: BasePart?
         if not taggerRoot or not targetRoot then
@@ -104,7 +109,7 @@ function TagService.Init()
         end
 
         -- 2. Anti-Exploit: Distance check with network ping tolerance
-        local maxAllowedDistance = Config.Tagging.BaseReachDistance + Config.Tagging.MaxLatencySlackDistance
+        local maxAllowedDistance = Config.Tagging.BaseReachDistance + StyleService.GetReachBonus(player) + Config.Tagging.MaxLatencySlackDistance
         local currentDistance = (targetPos - taggerPos).Magnitude
         if currentDistance > maxAllowedDistance then
             warn(`[TagService] Rejected tag: Distance {currentDistance} exceeded max {maxAllowedDistance}`)
@@ -119,17 +124,6 @@ function TagService.Init()
 
         -- 4. Tag Validated!
         PlayerStateService.SetTagged(targetPlayer, true)
-
-        -- Immobilize / Stun target
-        local targetHumanoid = targetChar:FindFirstChildOfClass("Humanoid")
-        if targetHumanoid then
-            targetHumanoid.WalkSpeed = 0
-            task.delay(Config.Tagging.TagStunDuration, function()
-                if targetChar and targetHumanoid and targetHumanoid.Health > 0 then
-                    targetHumanoid.WalkSpeed = Config.Movement.WalkSpeed
-                end
-            end)
-        end
 
         -- Broadcast TagConfirmed to all clients for VFX and audio
         local tagConfirmedEvent = Remotes.GetEvent("TagConfirmed")

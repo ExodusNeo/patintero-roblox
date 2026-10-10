@@ -7,7 +7,7 @@
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
-local UserInputService = game:GetService("UserInputService")
+local ContextActionService = game:GetService("ContextActionService")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -15,8 +15,10 @@ local Types = require(ReplicatedStorage.Shared.Modules.Types)
 local Config = require(ReplicatedStorage.Shared.Modules.Config)
 local CourtGeometry = require(ReplicatedStorage.Shared.Modules.CourtGeometry)
 local Remotes = require(ReplicatedStorage.Shared.Modules.Remotes)
+local Styles = require(ReplicatedStorage.Shared.Modules.Styles)
 local FirstPersonController = require(script.Parent.FirstPersonController)
 local SoundController = require(script.Parent.SoundController)
+local TouchLayout = require(script.Parent.TouchLayout)
 
 local MovementController = {}
 
@@ -30,6 +32,8 @@ local slideStartTime = 0
 local slideDirection = Vector3.zero
 local lastSlideTime = 0
 local lastStaminaDrainTime = 0
+local dashUntil = 0
+local dashVelocity = Vector3.zero
 
 local currentRole: Types.GuardRole? = nil
 local currentTeam: Types.Team = "Spectators"
@@ -44,27 +48,53 @@ local function getCharacterComponents(): (Model?, Humanoid?, BasePart?)
     return character, humanoid, root
 end
 
+-- Style passive x active Haste x active Slow (SlowMult 0 = frozen). Attributes are set by the server.
+local function getSpeedMult(): number
+    local style = Styles.Get(player:GetAttribute("Style") :: string?)
+    local character = player.Character
+    if not character then return style.speedMult end
+    local haste = (character:GetAttribute("HasteMult") :: number?) or 1
+    local slow = (character:GetAttribute("SlowMult") :: number?) or 1
+    return style.speedMult * haste * slow
+end
+
+local function getMaxStamina(): number
+    return Config.Movement.MaxStamina * Styles.Get(player:GetAttribute("Style") :: string?).staminaMult
+end
+
+-- Move direction if moving, otherwise flat camera look.
+local function getMoveDirection(humanoid: Humanoid, root: BasePart): Vector3
+    if humanoid.MoveDirection.Magnitude > 0.1 then
+        return humanoid.MoveDirection.Unit
+    end
+    local camLook = camera.CFrame.LookVector
+    local flatLook = Vector3.new(camLook.X, 0, camLook.Z)
+    return if flatLook.Magnitude > 0.05 then flatLook.Unit else root.CFrame.LookVector
+end
+
 function MovementController.SetStaminaChangedCallback(callback: (current: number, max: number) -> ())
     onStaminaChangedCallback = callback
 end
 
 function MovementController.GetStamina(): (number, number)
-    return currentStamina, Config.Movement.MaxStamina
+    return currentStamina, getMaxStamina()
 end
 
 local function applySpeed()
     local _, humanoid, _ = getCharacterComponents()
     if not humanoid then return end
 
+    local base
     if isSliding then
-        humanoid.WalkSpeed = Config.Movement.SlideInitialSpeed
+        base = Config.Movement.SlideInitialSpeed
     elseif currentTeam == "Guards" then
-        humanoid.WalkSpeed = if isSprinting and currentStamina > 0 then Config.Movement.GuardStrafeSpeed + 4 else Config.Movement.GuardStrafeSpeed
+        base = if isSprinting and currentStamina > 0 then Config.Movement.GuardStrafeSpeed + 4 else Config.Movement.GuardStrafeSpeed
     elseif isSprinting and currentStamina > 0 then
-        humanoid.WalkSpeed = Config.Movement.SprintSpeed
+        base = Config.Movement.SprintSpeed
     else
-        humanoid.WalkSpeed = Config.Movement.WalkSpeed
+        base = Config.Movement.WalkSpeed
     end
+    humanoid.WalkSpeed = base * getSpeedMult()
 end
 
 local function triggerSlide()
@@ -76,19 +106,8 @@ local function triggerSlide()
     local _, humanoid, root = getCharacterComponents()
     if not humanoid or not root or humanoid.FloorMaterial == Enum.Material.Air then return end
 
-    -- Determine slide direction: either move direction or camera forward
-    local moveDir = humanoid.MoveDirection
-    if moveDir.Magnitude > 0.1 then
-        slideDirection = moveDir.Unit
-    else
-        local camLook = camera.CFrame.LookVector
-        local flatLook = Vector3.new(camLook.X, 0, camLook.Z)
-        if flatLook.Magnitude > 0.05 then
-            slideDirection = flatLook.Unit
-        else
-            slideDirection = root.CFrame.LookVector
-        end
-    end
+    if getSpeedMult() <= 0 then return end
+    slideDirection = getMoveDirection(humanoid, root)
 
     isSliding = true
     slideStartTime = now
@@ -119,6 +138,38 @@ local function triggerSlide()
     end)
 end
 
+-- Skill: short velocity burst (caster-side prediction; server only checks the cooldown).
+function MovementController.Dash(speed: number, duration: number)
+    local _, humanoid, root = getCharacterComponents()
+    if not humanoid or not root or getSpeedMult() <= 0 then return end
+    dashVelocity = getMoveDirection(humanoid, root) * speed
+    dashUntil = os.clock() + duration
+    FirstPersonController.SetSliding(true)
+    task.delay(duration, function()
+        if not isSliding then
+            FirstPersonController.SetSliding(false)
+        end
+    end)
+end
+
+-- Skill: instant short-range teleport, stopped 2 studs before walls/barriers.
+function MovementController.Blink(distance: number)
+    local character, humanoid, root = getCharacterComponents()
+    if not character or not humanoid or not root or getSpeedMult() <= 0 then return end
+    local direction = getMoveDirection(humanoid, root)
+
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Exclude
+    params.FilterDescendantsInstances = { character }
+    local hit = Workspace:Raycast(root.Position, direction * distance, params)
+    local travel = if hit then math.max(hit.Distance - 2, 0) else distance
+    root.CFrame += direction * travel
+end
+
+function MovementController.RestoreStamina(amount: number)
+    currentStamina = math.clamp(currentStamina + amount, 0, getMaxStamina())
+end
+
 function MovementController.Init()
     -- Listen to state replication from server
     local playerStateEvent = Remotes.GetEvent("PlayerStateUpdated")
@@ -128,31 +179,33 @@ function MovementController.Init()
         applySpeed()
     end)
 
-    -- Input bindings: Sprint (Shift) & Slide (C / Ctrl)
-    UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: boolean)
-        if gameProcessed then return end
-
-        if input.KeyCode == Enum.KeyCode.LeftShift then
+    -- Sprint (hold) & Slide: keyboard, gamepad, and an auto-created touch button each
+    ContextActionService:BindAction("Sprint", function(_, inputState: Enum.UserInputState)
+        if inputState == Enum.UserInputState.Begin then
             if currentStamina > 5 then
                 isSprinting = true
                 FirstPersonController.SetSprinting(true)
                 SoundController.PlaySneakerSqueak()
                 applySpeed()
             end
-        elseif input.KeyCode == Enum.KeyCode.C or input.KeyCode == Enum.KeyCode.LeftControl then
+        elseif isSprinting then -- End or Cancel
+            isSprinting = false
+            FirstPersonController.SetSprinting(false)
+            applySpeed()
+        end
+        return Enum.ContextActionResult.Pass
+    end, true, Enum.KeyCode.LeftShift, Enum.KeyCode.ButtonL3)
+    ContextActionService:SetTitle("Sprint", "RUN")
+    TouchLayout.place("Sprint")
+
+    ContextActionService:BindAction("Slide", function(_, inputState: Enum.UserInputState)
+        if inputState == Enum.UserInputState.Begin then
             triggerSlide()
         end
-    end)
-
-    UserInputService.InputEnded:Connect(function(input: InputObject, _gameProcessed: boolean)
-        if input.KeyCode == Enum.KeyCode.LeftShift then
-            if isSprinting then
-                isSprinting = false
-                FirstPersonController.SetSprinting(false)
-                applySpeed()
-            end
-        end
-    end)
+        return Enum.ContextActionResult.Pass
+    end, true, Enum.KeyCode.C, Enum.KeyCode.LeftControl, Enum.KeyCode.ButtonB)
+    ContextActionService:SetTitle("Slide", "SLIDE")
+    TouchLayout.place("Slide")
 
     -- RenderStepped loop: Slide velocity sustain, stamina economy, and guard rail locking
     RunService.RenderStepped:Connect(function(deltaTime: number)
@@ -160,9 +213,16 @@ function MovementController.Init()
         if not humanoid or not root then return end
 
         local now = os.clock()
+        applySpeed() -- speed modifiers (haste/slow) change at any time
+        local frozen = getSpeedMult() <= 0
+
+        -- 0. Skill dash burst
+        if now < dashUntil and not frozen then
+            root.AssemblyLinearVelocity = Vector3.new(dashVelocity.X, root.AssemblyLinearVelocity.Y, dashVelocity.Z)
+        end
 
         -- 1. Active Slide Physics Glide
-        if isSliding then
+        if isSliding and not frozen then
             local elapsed = now - slideStartTime
             local alpha = math.clamp(elapsed / Config.Movement.SlideDuration, 0, 1)
             -- Ease-out velocity decay from 42 studs/s down to 24 studs/s
@@ -180,11 +240,11 @@ function MovementController.Init()
                 FirstPersonController.SetSprinting(false)
                 applySpeed()
             end
-        elseif (now - lastStaminaDrainTime) >= Config.Movement.StaminaRegenDelay and currentStamina < Config.Movement.MaxStamina and not isSliding then
+        elseif (now - lastStaminaDrainTime) >= Config.Movement.StaminaRegenDelay and currentStamina < getMaxStamina() and not isSliding then
             currentStamina = math.clamp(currentStamina + (Config.Movement.StaminaRegenRate * deltaTime), 0, Config.Movement.MaxStamina)
         end
 
-        local staminaRatio = currentStamina / Config.Movement.MaxStamina
+        local staminaRatio = currentStamina / getMaxStamina()
         SoundController.UpdateStaminaAudio(staminaRatio)
 
         if onStaminaChangedCallback then

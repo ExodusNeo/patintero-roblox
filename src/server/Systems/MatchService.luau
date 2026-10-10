@@ -7,6 +7,7 @@
 ]]
 
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Types = require(ReplicatedStorage.Shared.Modules.Types)
@@ -17,6 +18,8 @@ local Remotes = require(ReplicatedStorage.Shared.Modules.Remotes)
 local CourtService = require(script.Parent.CourtService)
 local PlayerStateService = require(script.Parent.PlayerStateService)
 local TagService = require(script.Parent.TagService)
+local StyleService = require(script.Parent.StyleService)
+local TravelService = require(script.Parent.TravelService)
 
 local MatchService = {}
 
@@ -37,7 +40,25 @@ local teamRoster: {
     Guards = {},
 }
 
-local guardRolesOrder: { Types.GuardRole } = { "Line1", "Line2", "Line3", "Patotot" }
+-- Assignment priority (a lone guard gets the mid line) and the line-hop cycle.
+local guardRolesOrder: { Types.GuardRole } = { "Line2", "Line1", "Line3", "Patotot" }
+local lastLineSwitch: { [Player]: number } = {}
+
+-- Party size the hub sent (teleport data is client-visible, so it's only a wait hint).
+local expectedPlayers = Config.Match.MinPlayersToStart
+
+local function readJoinData(player: Player)
+    local data = player:GetJoinData().TeleportData
+    if typeof(data) == "table" and typeof(data.expectedPlayers) == "number" and data.expectedPlayers == data.expectedPlayers then
+        expectedPlayers = math.clamp(math.floor(data.expectedPlayers), 1, 8)
+    end
+end
+
+local function returnToHub()
+    if RunService:IsStudio() then return end -- teleports don't work in Studio; just play again
+    TravelService.Send(Config.Places.HubPlaceId, Players:GetPlayers())
+    -- Anyone whose teleport failed stays and gets another match.
+end
 
 local function broadcastMatchState()
     local remote = Remotes.GetEvent("MatchStateUpdated")
@@ -153,11 +174,46 @@ local function checkPasserPositions()
                 matchState.passerScore += Config.Match.PointsForTubig
                 broadcastMatchState()
                 tubigEvent:FireAllClients(player.UserId, player.DisplayName, matchState.passerScore)
+                StyleService.AddSpins(player, Config.Styles.SpinsPerTubig)
 
                 -- Explicitly reset lap state so player can embark on a new outbound run
                 PlayerStateService.ResetLap(player)
             end
         end
+    end
+end
+
+-- Guard hops to the next line no other guard holds, keeping their position along the line.
+local function onSwitchLine(player: Player)
+    if matchState.phase ~= "RoundActive" and matchState.phase ~= "Countdown" then return end
+    local state = PlayerStateService.GetState(player)
+    if not state or state.team ~= "Guards" or not state.guardRole then return end
+
+    local now = os.clock()
+    if now - (lastLineSwitch[player] or -math.huge) < Config.Tagging.LineSwitchCooldown then return end
+
+    local taken: { [string]: boolean } = {}
+    for _, guard in ipairs(teamRoster.Guards) do
+        local guardState = PlayerStateService.GetState(guard)
+        if guard ~= player and guard.Parent and guardState and guardState.guardRole then
+            taken[guardState.guardRole] = true
+        end
+    end
+
+    local current = table.find(guardRolesOrder, state.guardRole) or 1
+    for step = 1, #guardRolesOrder - 1 do
+        local role = guardRolesOrder[(current - 1 + step) % #guardRolesOrder + 1]
+        if taken[role] then continue end
+
+        lastLineSwitch[player] = now
+        PlayerStateService.SetTeam(player, "Guards", role)
+        local root = if player.Character then player.Character:FindFirstChild("HumanoidRootPart") :: BasePart? else nil
+        if root then
+            local line = CourtGeometry.GetLineDefinitions()[role]
+            local spot = CourtGeometry.ProjectPointOntoSegment(root.Position, line.startPoint, line.endPoint)
+            root.CFrame = CFrame.new(spot.X, root.Position.Y, spot.Z) * root.CFrame.Rotation
+        end
+        return
     end
 end
 
@@ -174,14 +230,15 @@ end
 
 function MatchService.Init()
     -- Hook TagService onTagSuccess callback
-    TagService.SetTagSuccessCallback(function(_tagger: Player, _target: Player)
+    TagService.SetTagSuccessCallback(function(_tagger: Player, target: Player)
         matchState.guardScore += Config.Match.PointsForTag
         matchState.activePasserCount = countActivePassers()
         broadcastMatchState()
 
-        -- If all passers are tagged, end round early!
-        if matchState.activePasserCount <= 0 and #teamRoster.Passers > 0 then
-            matchState.timeRemaining = 0
+        -- Tagged Passers are out for the round: send them to the sideline.
+        local root = if target.Character then target.Character:FindFirstChild("HumanoidRootPart") :: BasePart? else nil
+        if root then
+            root.CFrame = CourtService.GetSidelineCFrame()
         end
     end)
 
@@ -189,6 +246,16 @@ function MatchService.Init()
     local initialDataFunc = Remotes.GetFunction("GetInitialMatchData")
     initialDataFunc.OnServerInvoke = function(_player: Player)
         return matchState
+    end
+
+    Remotes.GetEvent("SwitchLine").OnServerEvent:Connect(onSwitchLine)
+    Players.PlayerRemoving:Connect(function(player)
+        lastLineSwitch[player] = nil
+    end)
+
+    Players.PlayerAdded:Connect(readJoinData)
+    for _, player in Players:GetPlayers() do
+        readJoinData(player)
     end
 
     -- Position checking loop for zone checkpoints
@@ -208,11 +275,17 @@ function MatchService.Init()
             while #Players:GetPlayers() < Config.Match.MinPlayersToStart do
                 task.wait(1)
             end
+            local arrivalDeadline = os.clock() + Config.Match.ArrivalTimeout
+            while #Players:GetPlayers() < expectedPlayers and os.clock() < arrivalDeadline do
+                task.wait(0.5)
+            end
 
             -- 2. Intermission & Team Assignment
             matchState.phase = "Countdown"
             matchState.timeRemaining = Config.Match.CountdownTime
-            assignTeams()
+            if matchState.roundNumber == 0 then
+                assignTeams() -- later rounds keep the roster swapTeams() produced
+            end
             setupRoundPositions()
             broadcastMatchState()
 
@@ -228,13 +301,20 @@ function MatchService.Init()
             matchState.timeRemaining = Config.Match.RoundDuration
             broadcastMatchState()
 
-            while matchState.timeRemaining > 0 and matchState.phase == "RoundActive" do
+            -- Ends on time-out or when every Passer is tagged out / has left
+            while matchState.timeRemaining > 0 and countActivePassers() > 0 do
                 task.wait(1)
                 matchState.timeRemaining -= 1
                 broadcastMatchState()
             end
 
             -- 4. Round Ended
+            for _, player in ipairs(teamRoster.Passers) do
+                StyleService.AddSpins(player, Config.Styles.SpinsPerRound)
+            end
+            for _, player in ipairs(teamRoster.Guards) do
+                StyleService.AddSpins(player, Config.Styles.SpinsPerRound)
+            end
             matchState.phase = "RoundEnded"
             matchState.timeRemaining = 5
             broadcastMatchState()
@@ -250,6 +330,7 @@ function MatchService.Init()
                 matchState.roundNumber = 0
                 matchState.passerScore = 0
                 matchState.guardScore = 0
+                returnToHub()
             else
                 swapTeams()
             end
