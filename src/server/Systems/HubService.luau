@@ -36,9 +36,9 @@ local PAD_COLORS: { [number]: Color3 } = {
 
 local pads: { Pad } = {}
 
-local SIGN_FONT = Font.new("rbxasset://fonts/families/LuckiestGuy.json")
+local SIGN_FONT = Font.new("rbxasset://fonts/families/Oswald.json", Enum.FontWeight.Bold)
 
--- Queue-pad sign in the Styles menu's look: indigo plate, pad-colored outline, sign lettering.
+-- Queue-pad sign in the Styles menu's look: night-slate plate, pad-colored edge, scoreboard lettering.
 -- Runs on every pad at start, so saved pads and freshly built ones match.
 local function dressSign(pad: BasePart)
     local label = pad:FindFirstChild("Status", true)
@@ -50,14 +50,14 @@ local function dressSign(pad: BasePart)
     local plate = Instance.new("Frame")
     plate.Name = "Plate"
     plate.Size = UDim2.fromScale(1, 1)
-    plate.BackgroundColor3 = Color3.fromRGB(23, 26, 51)
-    plate.BackgroundTransparency = 0.12
+    plate.BackgroundColor3 = Color3.fromRGB(19, 24, 32)
+    plate.BackgroundTransparency = 0.1
     local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 18)
+    corner.CornerRadius = UDim.new(0, 4)
     corner.Parent = plate
     local edge = Instance.new("UIStroke")
     edge.Color = pad.Color
-    edge.Thickness = 3
+    edge.Thickness = 2
     edge.Parent = plate
     plate.Parent = billboard
 
@@ -65,11 +65,11 @@ local function dressSign(pad: BasePart)
     label.Position = UDim2.fromOffset(10, 6)
     label.Size = UDim2.new(1, -20, 1, -12)
     label.FontFace = SIGN_FONT
-    label.TextColor3 = Color3.fromRGB(255, 243, 214)
+    label.TextColor3 = Color3.fromRGB(230, 232, 227)
     label.TextStrokeTransparency = 1
     local ink = Instance.new("UIStroke")
-    ink.Color = Color3.fromRGB(13, 15, 32)
-    ink.Thickness = 2
+    ink.Color = Color3.fromRGB(11, 14, 19)
+    ink.Thickness = 1.5
     ink.Parent = label
 end
 

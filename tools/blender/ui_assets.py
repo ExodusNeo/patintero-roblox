@@ -1,9 +1,9 @@
-# UI art for the "jeepney chrome" interface, made in Blender. Run inside Blender:
+# UI art for the "night court" interface, made in Blender. Run inside Blender:
 #   exec(open(r"...\tools\blender\ui_assets.py").read(), {})
 # Writes assets/ui/*.png. Two kinds of output:
-#   - 3D renders (Eevee, own "PatinteroUI" scene): the chrome frame rim and the embossed skill icons
-#   - flat sprites (numpy + bpy image API): rays, ribbon, bunting, confetti flag, glow
-# Everything meant to be tinted in Roblox (ImageColor3) is rendered white/grey; the bunting is full color.
+#   - 3D renders (Eevee, own "PatinteroUI" scene): the embossed skill-kind icons
+#   - flat sprites (numpy + bpy image API): sunburst rays, glow, asphalt grain
+# Everything is white/grey so Roblox can tint it (ImageColor3).
 import math
 import os
 
@@ -60,54 +60,13 @@ def glow(size=256):
     return mono(np.exp(-(r / 0.45) ** 2) * smooth(1.0, 0.85, r))
 
 
-def ribbon(w=1024, h=256):
-    """Banner ribbon: a body with two lower tails ending in V-notches; grey shading for tinting."""
-    X, Y = grid(w, h)
-    u = (X + 1) / 2 * w  # pixels
-    v = (Y + 1) / 2 * h
-    body = (u > 150) & (u < w - 150) & (v > 52) & (v < 204)
-    tail_y = (v > 28) & (v < 172)
-    notch = lambda dist: dist > (72 - np.abs(v - 100)) * 0.55  # V cut into the outer end, deepest mid-height
-    left = tail_y & (u > 18) & (u < 190) & notch(u - 18)
-    right = tail_y & (u < w - 18) & (u > w - 190) & notch(w - 18 - u)
-    tails = (left | right) & ~body
-    shade = np.where(body, 0.95 - 0.18 * ((204 - v) / 152) ** 2, 0.72)  # body lit from the top, tails behind
-    fold = tails & (((u > 150) & (u < 190)) | ((u > w - 190) & (u < w - 150))) & (v < 60)
-    shade = np.where(fold, 0.45, shade)
-    stitch = body & ((np.abs(v - 66) < 2.5) | (np.abs(v - 190) < 2.5)) & ((u.astype(int) // 14) % 2 == 0)
-    shade = np.where(stitch, 0.7, shade)
-    return mono((body | tails).astype(np.float32), shade.astype(np.float32))
-
-
-def bunting(w=512, h=128):
-    """Tileable banderitas: a sagging string with six colored pennants."""
-    X, Y = grid(w, h)
-    u = (X + 1) / 2 * w
-    v = (1 - Y) / 2 * h  # pixels from the top
-    string_y = 14 + 10 * np.sin(np.pi * u / w)
-    rgba = np.zeros((h, w, 4), dtype=np.float32)
-    line = np.abs(v - string_y) < 2.2
-    rgba[line] = (0.15, 0.13, 0.12, 1)
-    colors = [(0.88, 0.19, 0.25), (1.0, 0.79, 0.24), (0.12, 0.71, 0.66), (0.25, 0.5, 0.95), (0.98, 0.97, 0.94), (0.4, 0.78, 0.3)]
-    n = len(colors)
-    for i, col in enumerate(colors):
-        cx = (i + 0.5) * w / n
-        top = 14 + 10 * math.sin(math.pi * cx / w)
-        half = w / n * 0.38
-        tri = (v > top) & (v < top + 72) & (np.abs(u - cx) < half * (1 - (v - top) / 72))
-        shade = 1 - 0.25 * ((u - (cx - half)) / (2 * half))  # left edge catches the light
-        for c in range(3):
-            rgba[..., c] = np.where(tri, col[c] * shade, rgba[..., c])
-        rgba[..., 3] = np.where(tri, 1, rgba[..., 3])
-    return rgba
-
-
-def flag(size=96):
-    X, Y = grid(size, size)
-    v = (1 - Y) / 2  # 0 top .. 1 bottom
-    tri = (v > 0.1) & (v < 0.92) & (np.abs(X) < 0.85 * (1 - (v - 0.1) / 0.82))
-    shade = 1 - 0.3 * (X + 1) / 2
-    return mono(tri.astype(np.float32), shade.astype(np.float32))
+def grain(size=256, seed=7):
+    """Tileable asphalt grain: sparse light specks over soft noise, laid over panels at low opacity."""
+    rng = np.random.default_rng(seed)
+    noise = rng.random((size, size)).astype(np.float32)
+    soft = (noise + np.roll(noise, 1, 0) + np.roll(noise, 1, 1) + np.roll(noise, -1, 0) + np.roll(noise, -1, 1)) / 5
+    specks = (noise > 0.985).astype(np.float32)
+    return mono(np.clip((soft - 0.35) * 0.6 + specks * 0.8, 0, 1))
 
 
 # ---------------------------------------------------------------- 3D renders
@@ -174,62 +133,6 @@ def render(scene, name, size):
     scene.render.resolution_x = scene.render.resolution_y = size
     scene.render.filepath = os.path.join(OUT, name + ".png")
     bpy.ops.render.render(write_still=True, scene=scene.name)
-
-
-def rounded_rect_points(half, radius, steps=24):
-    pts = []
-    for cx, cy, a0 in ((half - radius, half - radius, 0), (-half + radius, half - radius, 90),
-                       (-half + radius, -half + radius, 180), (half - radius, -half + radius, 270)):
-        for i in range(steps + 1):
-            a = math.radians(a0 + 90 * i / steps)
-            pts.append((cx + radius * math.cos(a), cy + radius * math.sin(a)))
-    return pts
-
-
-def matcap_chrome():
-    """Chrome as emission driven by how much the surface faces a top-left light: crisp bright/dark bands
-    every time (Eevee's world reflections blur them away on a thin tube)."""
-    m = bpy.data.materials.get("m_matcap_chrome") or bpy.data.materials.new("m_matcap_chrome")
-    m.use_nodes = True
-    nt = m.node_tree
-    nt.nodes.clear()
-    geo = nt.nodes.new("ShaderNodeNewGeometry")
-    dot = nt.nodes.new("ShaderNodeVectorMath")
-    dot.operation = "DOT_PRODUCT"
-    dot.inputs[1].default_value = (-0.42, 0.42, 0.8)
-    ramp = nt.nodes.new("ShaderNodeValToRGB")
-    els = ramp.color_ramp.elements
-    els[0].position, els[0].color = 0.0, (0.1, 0.11, 0.16, 1)
-    els[1].position, els[1].color = 1.0, (1.0, 1.0, 1.0, 1)
-    for pos, col in ((0.3, (0.55, 0.6, 0.7, 1)), (0.5, (0.16, 0.18, 0.26, 1)), (0.66, (0.92, 0.95, 1.0, 1)), (0.82, (0.62, 0.68, 0.8, 1))):
-        els.new(pos).color = col
-    emit = nt.nodes.new("ShaderNodeEmission")
-    out = nt.nodes.new("ShaderNodeOutputMaterial")
-    nt.links.new(geo.outputs["Normal"], dot.inputs[0])
-    nt.links.new(dot.outputs["Value"], ramp.inputs["Fac"])
-    nt.links.new(ramp.outputs["Color"], emit.inputs["Color"])
-    nt.links.new(emit.outputs["Emission"], out.inputs["Surface"])
-    return m
-
-
-def chrome_rim(scene):
-    """Rounded-rect chrome tube for 9-slice frames. At 512 px: centerline 41 px in from the edge,
-    corner radius 107 px, tube 36 px thick -> SliceCenter Rect(170, 170, 342, 342)."""
-    curve = bpy.data.curves.new("RimPath", "CURVE")
-    curve.dimensions = "3D"
-    spline = curve.splines.new("POLY")
-    pts = rounded_rect_points(1 - 0.16, 0.42)
-    spline.points.add(len(pts) - 1)
-    for p, (x, y) in zip(spline.points, pts):
-        p.co = (x, y, 0, 1)
-    spline.use_cyclic_u = True
-    curve.bevel_depth = 0.07
-    curve.bevel_resolution = 8
-    rim = bpy.data.objects.new("Rim", curve)
-    rim.data.materials.append(matcap_chrome())
-    scene.collection.objects.link(rim)
-    render(scene, "ui_rim", 512)
-    bpy.data.objects.remove(rim, do_unlink=True)
 
 
 # Glyph outlines in -1..1 (several polygons per icon are fine; overlaps read as one shape)
@@ -328,11 +231,8 @@ def icon(scene, name, polys):
 def build():
     save_rgba("ui_rays", rays())
     save_rgba("ui_glow", glow())
-    save_rgba("ui_ribbon", ribbon())
-    save_rgba("ui_bunting", bunting())
-    save_rgba("ui_flag", flag())
+    save_rgba("ui_grain", grain())
     scene = ui_scene()
-    chrome_rim(scene)
     for name, polys in glyphs().items():
         icon(scene, name, polys)
     return sorted(os.listdir(OUT))

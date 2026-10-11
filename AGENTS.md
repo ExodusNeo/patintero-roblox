@@ -48,10 +48,9 @@ rollable **Styles** (rarity-weighted, each with a passive + two skills) in the s
 - **Effect sprites** come from `tools/blender/fx_textures.py` (white-on-transparent PNGs in `assets/fx/`),
   uploaded with the Studio MCP `upload_image` tool (serve `assets/fx` on localhost); the ids live in
   `SkillEffects.TEX`. Re-upload and update the ids if a sprite changes.
-- **UI art** comes from `tools/blender/ui_assets.py` (`assets/ui/`): Eevee renders of the chrome frame rim
-  (matcap-style emission so the bands stay crisp) and the 7 embossed skill-kind icons, plus numpy sprites
-  (sunburst rays, glow, ribbon, banderita bunting, confetti flag). Uploaded the same way; ids live in
-  `UIKit.Image` / `UIKit.Icon`.
+- **UI art** comes from `tools/blender/ui_assets.py` (`assets/ui/`): Eevee renders of the 7 embossed
+  skill-kind icons, plus numpy sprites (sunburst rays, glow, tileable asphalt grain). Uploaded the same way;
+  ids live in `UIKit.Image` / `UIKit.Icon` (the shockwave ring reuses the `fx_ring` effect sprite).
 - Disk → Studio for generated/new files: serve `src/` on localhost and `HttpService:GetAsync` each file
   into its ModuleScript from an Edit-mode `execute_luau` (HttpEnabled on briefly, then restored).
 
@@ -133,19 +132,22 @@ only new systems. If several rows match, load all of them. If none match, say so
   never loads stale spins; the `Teleporting` player attribute blocks spins/queueing meanwhile.
 
 ### Styles menu (hub; G / gamepad B to close, or the top-left STYLES button) — `SpinController`
-- A chrome-framed board (laid out at 860x500, scaled to fit any screen) with banderitas strung across
-  the top, over a dimmed backdrop. Opening springs it up and fills the odds bars one tier at a time.
-- Left: showcase of the player's own avatar on a podium (ViewportFrame + WorldModel, scripts stripped)
-  looping the style's dance (`<id>_Pose`) over slowly spinning sunburst rays in the rarity color.
-- Right: style name in sign lettering (Epic/Legendary names shimmer), rarity + EQUIPPED chips,
-  description, Q/E skill cards with the skill-kind icon, stat chips, the roll **odds** per tier as bars
-  (from `Config.Styles.RarityWeights`) with every style in each tier, and the shimmering SPIN button
-  with the spin count.
-- Spin: names shuffle, tick and punch while the rays speed up; Epic/Legendary get a beat of shake first.
-  The reveal flashes, bursts the rays and pops the name and rarity chip; Epic throws banderita confetti,
-  Legendary more confetti plus a board shake. The result (name, EQUIPPED tag, skill bar) stays hidden
-  until the reveal even though the server sets `Style` instantly. The skill bar is hidden while the menu
-  is open. The STYLES button (own ScreenGui, safe area) shows the spin count, which pops when spins are earned.
+- A slate board (laid out at 860x500, scaled to fit any screen) with an accent line across the top in the
+  shown style's rarity color, over a dimmed backdrop; the world behind is blurred (`UIKit.blur`).
+  Opening snaps it in and fills the odds bars one tier at a time.
+- Left: dark showcase of the player's own avatar on a podium (ViewportFrame + WorldModel, scripts
+  stripped) looping the style's dance (`<id>_Pose`) over faint, slow rays in the rarity color.
+- Right: style name in the condensed scoreboard face (Epic/Legendary get a cold light passing through
+  it), a filled rarity tag + outlined EQUIPPED tag, description, Q/E skill cards (rarity accent bar,
+  skill-kind icon, inset key cap), SPEED / STAMINA / REACH readouts, the roll **odds** per tier as thin bars
+  (from `Config.Styles.RarityWeights`) with every style in each tier, and the signal-red SPIN button with
+  the spin count inset.
+- Spin: names shuffle and tick (the accent line flickers through rarities) while the rays speed up;
+  Epic/Legendary get a beat of shake first. The reveal lands with a shockwave ring behind the avatar, a
+  flash, a snap of the name/rarity tag and the accent line sweeping across; Legendary adds a second white
+  ring, a board shake and a blur pulse. The result (name, EQUIPPED tag, skill bar) stays hidden until the
+  reveal even though the server sets `Style` instantly. The skill bar is hidden while the menu is open.
+  The STYLES button (own ScreenGui, safe area) shows the spin count, which snaps when spins are earned.
 
 ### Match (first person) — Core loop (Patintero)
 - The match server waits for the party the hub sent (`expectedPlayers` teleport data) and until no
@@ -212,7 +214,7 @@ only new systems. If several rows match, load all of them. If none match, say so
   `CanTouch = false`, non-solid decor gets `CanQuery = false` (flags/wires never block tag line of sight
   or Blink raycasts), parts under 1.5 studs get `CastShadow = false`. Run it after adding map pieces by hand.
 - Hub queue pads glow (a `PointLight` in the pad color) and emit rising sparkles (`HubService.decoratePad`).
-  Their signs are dressed at start (`HubService.dressSign`): indigo plate, pad-colored outline, sign lettering.
+  Their signs are dressed at start (`HubService.dressSign`): slate plate, pad-colored edge, scoreboard lettering.
 
 ### Style animations & effects (client) — `StyleAnimator`, `SkillEffects`, data in `StyleAnimations`
 - 24 Blender-made animations: `<styleId>_Q`, `<styleId>_E` (one-shots) and `<styleId>_Pose` (looping
@@ -252,21 +254,23 @@ only new systems. If several rows match, load all of them. If none match, say so
   only while the swipe plays.
 - **Tags** (`CourtVFXController`): the tagged Passer flashes red for everyone else; the tagger sees a red
   hit-marker ring pop around the crosshair (`HUDController`).
-- **HUD** (`HUDController`): a chrome-rimmed "route sign" plate with the Red/Blue score blocks (your side
-  has a yellow outline; scores roll up and pop), the phase line and a big sign-lettered clock (pops each
-  countdown second; red and punching in a round's last 10 s), and the role pill under it (its color
-  changes with your role). Chrome stamina pill (green → yellow → red, blinks under 25%). Event banners
-  are a Blender ribbon in the event color that pops in tilted, holds, floats up and fades; Tubig and the
-  winner get spinning rays behind. A newer banner cancels an older one's fade.
-- **Skill bar** (`StyleController`, both places): style name in sign lettering + rarity, two rounded
-  cards with the skill-kind icon in the rarity color, a rarity-tinted chrome rim and a yellow key cap;
-  cooldown shades the card from the top with a big countdown; the card squishes on cast and pops with a
-  glow flash when ready again.
-- **UIKit** (`Controllers/UIKit`) is the shared look: color tokens (street indigo, jeepney red, sun yellow,
-  banderita teal, cream text), fonts (Luckiest Guy display, Builder Sans UI), the uploaded images, one
-  motion vocabulary (Quick / Pop / Slide / Fade), and builders: `plate` (chrome rim 9-slice), `button`
-  (hover grow, press squish, release pop + click), `pop`, `shimmer`, `spin`, `countTo`, `shake`,
-  `confetti`, `fitScreen` (scale with screen height, 0.6–1.3). A GuiObject takes only one UIScale, so
-  `fitScreen` goes on a container and `button`/`pop` on the element inside. Loops, shakes and confetti
-  are skipped when the player's Reduced Motion setting is on.
+- **HUD** (`HUDController`): a slate broadcast scoreboard with team-tinted Red/Blue score blocks (an amber
+  underline marks your side; scores roll up and snap), the phase line and a big scoreboard clock (snaps each
+  countdown second; signal red in a round's last 10 s), and the role tag under it (accent bar in the role
+  color). Thin stamina bar (green → amber → red, flickers under 25%). Event banners are broadcast strips
+  (slate band fading out at both ends, accent line in the event color, text in caps) that slide in, hold,
+  slide on and fade; Tubig and the winner get faint rays behind. A newer strip cancels an older one's fade.
+- **Skill bar** (`StyleController`, both places): style name + rarity (in its color), two slate cards with
+  the skill-kind icon, a 1 px edge tinted toward the rarity and an inset key cap; cooldown shades the
+  card from the top with a big countdown; the card dips on cast and, when ready again, snaps while its
+  edge flashes the rarity color.
+- **UIKit** (`Controllers/UIKit`) is the shared "night court" look: chalk lines on night asphalt, read like a
+  sports broadcast. Tokens: Night / Deep / Slab / Steel slates, Chalk and Dim text, Signal red (main action,
+  urgency), Amber (yours); color is otherwise reserved for meaning (rarity, team, role). Fonts: Oswald
+  (condensed scoreboard face) for titles and numbers, Builder Sans for body. Motion is crisp, no overshoot
+  (Quick / Snap / Slide / Fade). Builders: `panel` (small radius, 1 px steel edge, asphalt grain, optional
+  accent bar), `button` (hover nudge, press dip, release snap + click), `pop`, `shimmer` (faint), `spin`,
+  `countTo`, `shake`, `shockwave`, `blur` (menu blur, optional pulse), `fitScreen` (scale with screen height,
+  0.6–1.3). A GuiObject takes only one UIScale, so `fitScreen` goes on a container and `button`/`pop` on
+  the element inside. Loops, shakes and blur pulses are skipped when the player's Reduced Motion is on.
 - `CourtGeometry` builds the line and zone definitions once (frozen tables) instead of on every call.
