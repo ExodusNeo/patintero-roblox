@@ -1,114 +1,92 @@
 --!strict
 --[[
     HUDController.luau
-    Client presentation controller managing the full-screen competitive HUD:
-    Scoreboard, match phase & countdown timer, role indicator, stamina gauge,
-    crosshair, and animated event banners ("TUBIG!", "TAGGED!").
+    Match HUD in the "jeepney chrome" style (UIKit): a route-sign plate with the Red/Blue scores and the
+    round clock, the role pill, crosshair + hit marker, the stamina pill, and ribbon banners for events
+    ("TUBIG!", zones, tags, the winner).
 ]]
 
 local Players = game:GetService("Players")
-local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 
 local Types = require(ReplicatedStorage.Shared.Modules.Types)
 local Remotes = require(ReplicatedStorage.Shared.Modules.Remotes)
 local MovementController = require(script.Parent.MovementController)
+local UIKit = require(script.Parent.UIKit)
+
+local C, F, M = UIKit.Color, UIKit.Font, UIKit.Motion
+local make, text = UIKit.make, UIKit.text
 
 local HUDController = {}
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui") :: PlayerGui
 
-local screenGui: ScreenGui
+local PASSER_COLOR = Color3.fromRGB(100, 220, 255)
+local GUARD_COLOR = Color3.fromRGB(255, 140, 90)
+local SIDE_COLORS: { [Types.Side]: Color3 } = { Red = Color3.fromRGB(224, 48, 63), Blue = Color3.fromRGB(56, 128, 240) }
+local STAMINA_LOW, STAMINA_MID, STAMINA_HIGH = Color3.fromRGB(230, 60, 60), C.Yellow, Color3.fromRGB(70, 214, 110)
+local URGENT = Color3.fromRGB(255, 96, 86)
+
+type ScoreBlock = { frame: Frame, number: TextLabel, mark: UIStroke }
+
+local phaseLabel: TextLabel
 local timerLabel: TextLabel
-local scoreLabel: TextLabel
-local roleBadgeLabel: TextLabel
+local scoreBlocks: { [Types.Side]: ScoreBlock } = {}
+local roleBadge: Frame
+local roleLabel: TextLabel
 local staminaFill: Frame
-local bannerLabel: TextLabel
-local bannerFrame: Frame
-local bannerStroke: UIStroke
-local bannerScale: UIScale
-local timerScale: UIScale
 local hitMarker: Frame
 local hitRing: UIStroke
 local hitScale: UIScale
+local banner: CanvasGroup
+local bannerBody: Frame
+local bannerRibbon: ImageLabel
+local bannerRays: ImageLabel
+local bannerLabel: TextLabel
 
-local PASSER_COLOR = Color3.fromRGB(100, 220, 255)
-local GUARD_COLOR = Color3.fromRGB(255, 120, 80)
-local SIDE_COLORS: { [Types.Side]: Color3 } = { Red = Color3.fromRGB(240, 85, 75), Blue = Color3.fromRGB(80, 155, 255) }
-local STAMINA_LOW, STAMINA_MID, STAMINA_HIGH = Color3.fromRGB(220, 50, 50), Color3.fromRGB(255, 215, 0), Color3.fromRGB(50, 205, 50)
-
--- Every HUD block scales with the screen height so it fits phones and stays crisp on big monitors.
-local deviceScale = 1
-local scaledBlocks: { UIScale } = {}
 local bannerToken = 0
-local bannerFades: { Tween } = {}
-
-local function autoScale(block: GuiObject): UIScale
-    local scale = Instance.new("UIScale")
-    scale.Scale = deviceScale
-    scale.Parent = block
-    table.insert(scaledBlocks, scale)
-    return scale
-end
-
-local function updateDeviceScale()
-    local camera = Workspace.CurrentCamera
-    if not camera then return end
-    deviceScale = math.clamp(camera.ViewportSize.Y / 900, 0.6, 1.3)
-    for _, scale in scaledBlocks do
-        scale.Scale = deviceScale
-    end
-end
-
--- "RED: 5" in the side's color; your own side is underlined so you know which score is yours.
-local function sideScore(side: Types.Side, score: number): string
-    local text = `<font color="#{SIDE_COLORS[side]:ToHex()}">{string.upper(side)}:</font> {score}`
-    return if player:GetAttribute("Side") == side then `<u>{text}</u>` else text
-end
+local bannerTweens: { Tween } = {}
 
 local function formatTime(seconds: number): string
-    local mins = math.floor(seconds / 60)
-    local secs = seconds % 60
-    return string.format("%02d:%02d", mins, secs)
+    return string.format("%02d:%02d", math.floor(seconds / 60), seconds % 60)
 end
 
--- Pops in, holds, fades. A newer banner cancels the older one's fade so it never hides the new text.
-local function showBanner(text: string, color: Color3)
+-- Ribbon pops in (scale + tilt), holds, then floats up and fades. A newer banner takes over cleanly.
+-- `big` adds spinning sunburst rays behind it (Tubig, the winner).
+local function showBanner(message: string, color: Color3, big: boolean?)
     bannerToken += 1
     local token = bannerToken
-    for _, fade in bannerFades do
-        fade:Cancel()
+    for _, tween in bannerTweens do
+        tween:Cancel()
     end
-    table.clear(bannerFades)
+    table.clear(bannerTweens)
 
-    bannerLabel.Text = text
-    bannerLabel.TextColor3 = color
-    bannerStroke.Color = color
-    bannerFrame.Visible = true
-    bannerFrame.BackgroundTransparency = 0.25
-    bannerLabel.TextTransparency = 0
-    bannerStroke.Transparency = 0.2
+    bannerLabel.Text = message
+    bannerRibbon.ImageColor3 = color
+    bannerRays.ImageColor3 = color:Lerp(C.Yellow, 0.5)
+    bannerRays.Visible = big == true
+    banner.Visible = true
+    banner.GroupTransparency = 0
+    bannerBody.Position = UDim2.fromScale(0.5, 0.5)
+    bannerBody.Rotation = -7
+    UIKit.pop(bannerBody, 0.35)
+    TweenService:Create(bannerBody, M.Pop, { Rotation = 0 }):Play()
 
-    bannerScale.Scale = deviceScale * 0.7
-    TweenService:Create(bannerScale, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = deviceScale }):Play()
-
-    task.delay(1.8, function()
+    task.delay(1.9, function()
         if token ~= bannerToken then return end
-        local info = TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-        bannerFades = {
-            TweenService:Create(bannerFrame, info, { BackgroundTransparency = 1 }),
-            TweenService:Create(bannerStroke, info, { Transparency = 1 }),
-            TweenService:Create(bannerLabel, info, { TextTransparency = 1 }),
+        bannerTweens = {
+            TweenService:Create(banner, M.Slide, { GroupTransparency = 1 }),
+            TweenService:Create(bannerBody, M.Slide, { Position = UDim2.new(0.5, 0, 0.5, -24) }),
         }
-        bannerFades[3].Completed:Connect(function(state)
+        bannerTweens[1].Completed:Connect(function(state)
             if state == Enum.PlaybackState.Completed and token == bannerToken then
-                bannerFrame.Visible = false
+                banner.Visible = false
             end
         end)
-        for _, fade in bannerFades do
-            fade:Play()
+        for _, tween in bannerTweens do
+            tween:Play()
         end
     end)
 end
@@ -129,271 +107,286 @@ local function showHitMarker()
     fade:Play()
 end
 
+local function makeScoreBlock(parent: Frame, side: Types.Side, alignRight: boolean): ScoreBlock
+    local frame: Frame = make("Frame", {
+        Name = `{side}Score`,
+        AnchorPoint = Vector2.new(if alignRight then 1 else 0, 0),
+        Position = UDim2.new(if alignRight then 1 else 0, if alignRight then -16 else 16, 0, 16),
+        Size = UDim2.fromOffset(96, 70),
+        BackgroundColor3 = SIDE_COLORS[side],
+    }, parent)
+    UIKit.corner(frame, UDim.new(0, 16))
+    UIKit.wash(frame, 0.7)
+    -- Your own side wears a sun-yellow outline
+    local mark = UIKit.stroke(frame, C.Yellow, 3, 1)
+    text({ Text = string.upper(side), FontFace = F.Heavy, TextSize = 13, TextColor3 = C.Cream, Size = UDim2.new(1, 0, 0, 18), Position = UDim2.fromOffset(0, 5) }, frame)
+    local number = text({
+        Name = "Number",
+        Text = "0",
+        FontFace = F.Display,
+        TextSize = 38,
+        TextColor3 = C.White,
+        AnchorPoint = Vector2.new(0.5, 1),
+        Position = UDim2.new(0.5, 0, 1, -2),
+        Size = UDim2.new(1, 0, 0, 44),
+    }, frame)
+    UIKit.stroke(number, C.InkDeep, 2.5, 0.2)
+    return { frame = frame, number = number, mark = mark }
+end
+
 local function buildUI()
-    screenGui = Instance.new("ScreenGui")
-    screenGui.Name = "PatinteroHUD"
-    screenGui.ResetOnSpawn = false
-    screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    screenGui.ScreenInsets = Enum.ScreenInsets.CoreUISafeInsets
-    screenGui.Parent = playerGui
-    updateDeviceScale()
+    local gui: ScreenGui = make("ScreenGui", {
+        Name = "PatinteroHUD",
+        ResetOnSpawn = false,
+        ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+        ScreenInsets = Enum.ScreenInsets.CoreUISafeInsets,
+    }, nil)
 
-    -- 1. Top Bar Container
-    local topBar = Instance.new("Frame")
-    topBar.Name = "TopBar"
-    topBar.AnchorPoint = Vector2.new(0.5, 0)
-    topBar.Size = UDim2.new(0, 450, 0, 80)
-    topBar.Position = UDim2.new(0.5, 0, 0, 12)
-    topBar.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
-    topBar.BackgroundTransparency = 0.25
-    topBar.BorderSizePixel = 0
-    topBar.Parent = screenGui
+    -- Route-sign plate: scores on the sides, phase + clock in the middle
+    local plate: Frame = make("Frame", {
+        Name = "TopBar",
+        AnchorPoint = Vector2.new(0.5, 0),
+        Position = UDim2.new(0.5, 0, 0, 14),
+        Size = UDim2.fromOffset(460, 102),
+        BackgroundColor3 = C.Ink,
+        BackgroundTransparency = 0.08,
+    }, gui)
+    UIKit.wash(plate, 0.75)
+    UIKit.plate(plate)
+    UIKit.fitScreen(plate)
 
-    local topCorner = Instance.new("UICorner")
-    topCorner.CornerRadius = UDim.new(0, 8)
-    topCorner.Parent = topBar
+    scoreBlocks.Red = makeScoreBlock(plate, "Red", false)
+    scoreBlocks.Blue = makeScoreBlock(plate, "Blue", true)
 
-    local topStroke = Instance.new("UIStroke")
-    topStroke.Color = Color3.fromRGB(60, 60, 70)
-    topStroke.Thickness = 1.5
-    topStroke.Parent = topBar
-    autoScale(topBar)
+    phaseLabel = text({
+        Name = "Phase",
+        Text = "LOBBY",
+        FontFace = F.Heavy,
+        TextSize = 14,
+        TextColor3 = C.Muted,
+        AnchorPoint = Vector2.new(0.5, 0),
+        Position = UDim2.new(0.5, 0, 0, 14),
+        Size = UDim2.fromOffset(224, 18),
+    }, plate)
+    timerLabel = text({
+        Name = "Timer",
+        Text = "WAITING FOR PLAYERS...",
+        FontFace = F.Display,
+        TextScaled = true,
+        TextColor3 = C.Cream,
+        AnchorPoint = Vector2.new(0.5, 0),
+        Position = UDim2.new(0.5, 0, 0, 34),
+        Size = UDim2.fromOffset(224, 54),
+    }, plate)
+    make("UITextSizeConstraint", { MaxTextSize = 48 }, timerLabel)
+    UIKit.stroke(timerLabel, C.InkDeep, 3, 0.1)
 
-    local topShade = Instance.new("UIGradient")
-    topShade.Rotation = 90
-    topShade.Transparency = NumberSequence.new(0, 0.35)
-    topShade.Parent = topBar
+    -- Role pill hanging under the plate
+    roleBadge = make("Frame", {
+        Name = "RoleBadge",
+        AnchorPoint = Vector2.new(0.5, 0),
+        Position = UDim2.new(0.5, 0, 1, 16),
+        Size = UDim2.fromOffset(0, 30),
+        AutomaticSize = Enum.AutomaticSize.X,
+        BackgroundColor3 = C.InkLight,
+    }, plate)
+    UIKit.corner(roleBadge, UDim.new(1, 0))
+    make("UIPadding", { PaddingLeft = UDim.new(0, 16), PaddingRight = UDim.new(0, 16) }, roleBadge)
+    roleLabel = text({
+        Text = "ROLE: SPECTATOR",
+        FontFace = F.Heavy,
+        TextSize = 15,
+        TextColor3 = C.InkDeep,
+        Size = UDim2.fromScale(0, 1),
+        AutomaticSize = Enum.AutomaticSize.X,
+    }, roleBadge)
 
-    -- Match Timer / Phase Label
-    timerLabel = Instance.new("TextLabel")
-    timerLabel.Name = "TimerLabel"
-    timerLabel.Size = UDim2.new(1, 0, 0, 30)
-    timerLabel.Position = UDim2.new(0, 0, 0, 8)
-    timerLabel.BackgroundTransparency = 1
-    timerLabel.Font = Enum.Font.GothamBlack
-    timerLabel.TextSize = 22
-    timerLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    timerLabel.Text = "WAITING FOR PLAYERS..."
-    timerLabel.Parent = topBar
-    timerScale = Instance.new("UIScale")
-    timerScale.Parent = timerLabel
+    -- Crosshair + hit marker
+    local crosshair: Frame = make("Frame", {
+        Name = "Crosshair",
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.fromScale(0.5, 0.5),
+        Size = UDim2.fromOffset(6, 6),
+        BackgroundColor3 = C.White,
+        BackgroundTransparency = 0.35,
+    }, gui)
+    UIKit.corner(crosshair, UDim.new(1, 0))
+    UIKit.stroke(crosshair, C.InkDeep, 1, 0.5)
+    hitMarker = make("Frame", {
+        Name = "HitMarker",
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.fromScale(0.5, 0.5),
+        Size = UDim2.fromOffset(28, 28),
+        BackgroundTransparency = 1,
+        Visible = false,
+    }, gui)
+    UIKit.corner(hitMarker, UDim.new(1, 0))
+    hitRing = UIKit.stroke(hitMarker, Color3.fromRGB(255, 70, 70), 3)
+    hitScale = make("UIScale", {}, hitMarker)
 
-    -- Score Label
-    scoreLabel = Instance.new("TextLabel")
-    scoreLabel.Name = "ScoreLabel"
-    scoreLabel.Size = UDim2.new(1, 0, 0, 30)
-    scoreLabel.Position = UDim2.new(0, 0, 0, 42)
-    scoreLabel.BackgroundTransparency = 1
-    scoreLabel.Font = Enum.Font.GothamBold
-    scoreLabel.TextSize = 17
-    scoreLabel.RichText = true
-    scoreLabel.TextColor3 = Color3.fromRGB(200, 200, 210)
-    scoreLabel.Text = "RED: 0   |   BLUE: 0"
-    scoreLabel.Parent = topBar
+    -- Stamina pill with a thin chrome rim
+    local stamina: Frame = make("Frame", {
+        Name = "Stamina",
+        AnchorPoint = Vector2.new(0.5, 1),
+        Position = UDim2.new(0.5, 0, 1, -26),
+        Size = UDim2.fromOffset(280, 16),
+        BackgroundColor3 = C.InkDeep,
+        BackgroundTransparency = 0.15,
+    }, gui)
+    UIKit.plate(stamina, nil, 0.12)
+    UIKit.fitScreen(stamina)
+    staminaFill = make("Frame", { Name = "Fill", Size = UDim2.fromScale(1, 1), BackgroundColor3 = STAMINA_HIGH }, stamina)
+    UIKit.corner(staminaFill, UDim.new(1, 0))
+    UIKit.wash(staminaFill, 0.72)
 
-    -- Role Badge
-    local roleBadge = Instance.new("Frame")
-    roleBadge.Name = "RoleBadge"
-    roleBadge.AnchorPoint = Vector2.new(0.5, 0)
-    roleBadge.Size = UDim2.new(0, 360, 0, 32)
-    roleBadge.Position = UDim2.new(0.5, 0, 1, 8) -- hangs under the top bar and scales with it
-    roleBadge.BackgroundColor3 = Color3.fromRGB(30, 30, 38)
-    roleBadge.BackgroundTransparency = 0.3
-    roleBadge.BorderSizePixel = 0
-    roleBadge.Parent = topBar
+    -- Event banner: a ribbon (Blender) over optional spinning rays
+    banner = make("CanvasGroup", {
+        Name = "Banner",
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.fromScale(0.5, 0.32),
+        Size = UDim2.fromOffset(700, 240),
+        BackgroundTransparency = 1,
+        Visible = false,
+    }, gui)
+    UIKit.fitScreen(banner)
+    bannerBody = make("Frame", {
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.fromScale(0.5, 0.5),
+        Size = UDim2.fromScale(1, 1),
+        BackgroundTransparency = 1,
+    }, banner)
+    bannerRays = make("ImageLabel", {
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.fromScale(0.5, 0.5),
+        Size = UDim2.fromOffset(300, 300),
+        BackgroundTransparency = 1,
+        Image = UIKit.Image.Rays,
+        ImageTransparency = 0.2,
+        Visible = false,
+    }, bannerBody)
+    UIKit.spin(bannerRays, 9)
+    bannerRibbon = make("ImageLabel", {
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.fromScale(0.5, 0.5),
+        Size = UDim2.fromOffset(680, 170), -- the ribbon's own 4:1 shape (9-slice mangles its tails)
+        BackgroundTransparency = 1,
+        Image = UIKit.Image.Ribbon,
+    }, bannerBody)
+    bannerLabel = text({
+        Text = "",
+        FontFace = F.Display,
+        TextScaled = true,
+        TextColor3 = C.Cream,
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.new(0.5, 0, 0.5, -3),
+        Size = UDim2.fromOffset(450, 56),
+    }, bannerBody)
+    make("UITextSizeConstraint", { MaxTextSize = 40 }, bannerLabel)
+    UIKit.stroke(bannerLabel, C.InkDeep, 3, 0.15)
 
-    local roleCorner = Instance.new("UICorner")
-    roleCorner.CornerRadius = UDim.new(0, 6)
-    roleCorner.Parent = roleBadge
+    gui.Parent = playerGui
+end
 
-    roleBadgeLabel = Instance.new("TextLabel")
-    roleBadgeLabel.Name = "RoleBadgeLabel"
-    roleBadgeLabel.Size = UDim2.new(1, 0, 1, 0)
-    roleBadgeLabel.BackgroundTransparency = 1
-    roleBadgeLabel.Font = Enum.Font.GothamBold
-    roleBadgeLabel.TextSize = 14
-    roleBadgeLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
-    roleBadgeLabel.Text = "ROLE: SPECTATOR"
-    roleBadgeLabel.Parent = roleBadge
-
-    -- 2. Minimalist Center Crosshair
-    local crosshair = Instance.new("Frame")
-    crosshair.Name = "Crosshair"
-    crosshair.Size = UDim2.new(0, 6, 0, 6)
-    crosshair.Position = UDim2.new(0.5, -3, 0.5, -3)
-    crosshair.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-    crosshair.BackgroundTransparency = 0.4
-    crosshair.BorderSizePixel = 0
-    crosshair.Parent = screenGui
-
-    local crossCorner = Instance.new("UICorner")
-    crossCorner.CornerRadius = UDim.new(1, 0)
-    crossCorner.Parent = crosshair
-
-    hitMarker = Instance.new("Frame")
-    hitMarker.Name = "HitMarker"
-    hitMarker.AnchorPoint = Vector2.new(0.5, 0.5)
-    hitMarker.Position = UDim2.fromScale(0.5, 0.5)
-    hitMarker.Size = UDim2.fromOffset(28, 28)
-    hitMarker.BackgroundTransparency = 1
-    hitMarker.Visible = false
-    hitMarker.Parent = screenGui
-    local hitCorner = Instance.new("UICorner")
-    hitCorner.CornerRadius = UDim.new(1, 0)
-    hitCorner.Parent = hitMarker
-    hitRing = Instance.new("UIStroke")
-    hitRing.Color = Color3.fromRGB(255, 70, 70)
-    hitRing.Thickness = 3
-    hitRing.Parent = hitMarker
-    hitScale = Instance.new("UIScale")
-    hitScale.Parent = hitMarker
-
-    -- 3. Stamina Gauge
-    local staminaContainer = Instance.new("Frame")
-    staminaContainer.Name = "StaminaContainer"
-    staminaContainer.AnchorPoint = Vector2.new(0.5, 1)
-    staminaContainer.Size = UDim2.new(0, 240, 0, 14)
-    staminaContainer.Position = UDim2.new(0.5, 0, 1, -41)
-    staminaContainer.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
-    staminaContainer.BorderSizePixel = 0
-    staminaContainer.Parent = screenGui
-
-    local stamCorner = Instance.new("UICorner")
-    stamCorner.CornerRadius = UDim.new(0, 4)
-    stamCorner.Parent = staminaContainer
-    autoScale(staminaContainer)
-    local stamStroke = Instance.new("UIStroke")
-    stamStroke.Color = Color3.fromRGB(10, 10, 12)
-    stamStroke.Thickness = 1.5
-    stamStroke.Parent = staminaContainer
-
-    staminaFill = Instance.new("Frame")
-    staminaFill.Name = "StaminaFill"
-    staminaFill.Size = UDim2.new(1, 0, 1, 0)
-    staminaFill.BackgroundColor3 = Color3.fromRGB(50, 205, 50)
-    staminaFill.BorderSizePixel = 0
-    staminaFill.Parent = staminaContainer
-
-    local fillCorner = Instance.new("UICorner")
-    fillCorner.CornerRadius = UDim.new(0, 4)
-    fillCorner.Parent = staminaFill
-
-    -- 4. Event Announcement Banner
-    bannerFrame = Instance.new("Frame")
-    bannerFrame.Name = "BannerFrame"
-    bannerFrame.AnchorPoint = Vector2.new(0.5, 0.5)
-    bannerFrame.Size = UDim2.new(0, 420, 0, 90)
-    bannerFrame.Position = UDim2.fromScale(0.5, 0.35)
-    bannerFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
-    bannerFrame.BackgroundTransparency = 1
-    bannerFrame.BorderSizePixel = 0
-    bannerFrame.Visible = false
-    bannerFrame.Parent = screenGui
-
-    local bCorner = Instance.new("UICorner")
-    bCorner.CornerRadius = UDim.new(0, 12)
-    bCorner.Parent = bannerFrame
-    bannerStroke = Instance.new("UIStroke")
-    bannerStroke.Thickness = 2
-    bannerStroke.Parent = bannerFrame
-    bannerScale = autoScale(bannerFrame)
-
-    bannerLabel = Instance.new("TextLabel")
-    bannerLabel.Name = "BannerLabel"
-    bannerLabel.Size = UDim2.new(1, 0, 1, 0)
-    bannerLabel.BackgroundTransparency = 1
-    bannerLabel.Font = Enum.Font.GothamBlack
-    bannerLabel.TextSize = 32
-    bannerLabel.TextWrapped = true
-    bannerLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    bannerLabel.Text = ""
-    bannerLabel.Parent = bannerFrame
+local function renderOwnSide()
+    local mine = player:GetAttribute("Side")
+    for side, block in scoreBlocks do
+        block.mark.Transparency = if side == mine then 0 else 1
+    end
 end
 
 function HUDController.Init()
     buildUI()
-    local camera = Workspace.CurrentCamera
-    if camera then
-        camera:GetPropertyChangedSignal("ViewportSize"):Connect(updateDeviceScale)
-    end
+    renderOwnSide()
+    player:GetAttributeChangedSignal("Side"):Connect(renderOwnSide)
 
-    -- Hook Stamina Updates
+    -- Stamina: smooth green -> yellow -> red, blinking when nearly empty
     MovementController.SetStaminaChangedCallback(function(current: number, max: number)
         local ratio = math.clamp(current / max, 0, 1)
-        staminaFill.Size = UDim2.new(ratio, 0, 1, 0)
-        -- Smooth green -> yellow -> red as stamina drains
+        staminaFill.Size = UDim2.fromScale(ratio, 1)
         staminaFill.BackgroundColor3 = if ratio > 0.5
             then STAMINA_MID:Lerp(STAMINA_HIGH, (ratio - 0.5) * 2)
             else STAMINA_LOW:Lerp(STAMINA_MID, ratio * 2)
+        staminaFill.BackgroundTransparency = if ratio < 0.25 then 0.15 + 0.35 * (0.5 + 0.5 * math.sin(os.clock() * 12)) else 0
     end)
 
-    -- Match State Updates
-    local matchStateEvent = Remotes.GetEvent("MatchStateUpdated")
-    local lastPulse = -1
-    matchStateEvent.OnClientEvent:Connect(function(state: Types.MatchState)
-        scoreLabel.Text = `{sideScore("Red", state.redScore)}   |   {sideScore("Blue", state.blueScore)}`
-        timerLabel.TextColor3 = Color3.new(1, 1, 1)
+    local scores: { [Types.Side]: number } = { Red = 0, Blue = 0 }
+    local lastTick = -1
+    Remotes.GetEvent("MatchStateUpdated").OnClientEvent:Connect(function(state: Types.MatchState)
+        for side, value in { Red = state.redScore, Blue = state.blueScore } :: { [Types.Side]: number } do
+            if value ~= scores[side] then
+                scores[side] = value
+                UIKit.countTo(scoreBlocks[side].number, value)
+                UIKit.pop(scoreBlocks[side].number, 1.35)
+            end
+        end
 
+        timerLabel.TextColor3 = C.Cream
         if state.phase == "Lobby" then
-            timerLabel.Text = "LOBBY - WAITING FOR PLAYERS..."
+            phaseLabel.Text = "LOBBY"
+            timerLabel.Text = "WAITING FOR PLAYERS..."
         elseif state.phase == "Countdown" then
-            timerLabel.Text = `ROUND STARTING IN: {state.timeRemaining}s`
+            phaseLabel.Text = "ROUND STARTING IN"
+            timerLabel.Text = tostring(state.timeRemaining)
+            if state.timeRemaining ~= lastTick then
+                lastTick = state.timeRemaining
+                UIKit.pop(timerLabel, 1.4)
+            end
         elseif state.phase == "RoundActive" then
-            timerLabel.Text = `ROUND {state.roundNumber}  |  {formatTime(state.timeRemaining)}`
-            -- Last 10 seconds: the clock turns red and pulses each second
+            phaseLabel.Text = `ROUND {state.roundNumber}`
+            timerLabel.Text = formatTime(state.timeRemaining)
+            -- Last 10 seconds: the clock turns red and punches each second
             if state.timeRemaining <= 10 then
-                timerLabel.TextColor3 = Color3.fromRGB(255, 90, 80)
-                if state.timeRemaining ~= lastPulse then
-                    lastPulse = state.timeRemaining
-                    timerScale.Scale = 1.2
-                    TweenService:Create(timerScale, TweenInfo.new(0.4, Enum.EasingStyle.Quad), { Scale = 1 }):Play()
+                timerLabel.TextColor3 = URGENT
+                if state.timeRemaining ~= lastTick then
+                    lastTick = state.timeRemaining
+                    UIKit.pop(timerLabel, 1.25)
                 end
             end
         elseif state.phase == "RoundEnded" then
-            timerLabel.Text = "ROUND ENDED - SWAPPING SIDES!"
+            phaseLabel.Text = "ROUND ENDED"
+            timerLabel.Text = "SWAPPING SIDES!"
         elseif state.phase == "MatchOver" then
+            phaseLabel.Text = ""
             timerLabel.Text = "MATCH OVER!"
             local winner: Types.Side? = if state.redScore > state.blueScore then "Red" elseif state.blueScore > state.redScore then "Blue" else nil
             if winner then
-                showBanner(`{string.upper(winner)} WINS!`, SIDE_COLORS[winner])
+                showBanner(`{string.upper(winner)} WINS!`, SIDE_COLORS[winner], true)
             else
-                showBanner("MATCH DRAW!", Color3.fromRGB(255, 215, 0))
+                showBanner("MATCH DRAW!", C.Yellow, true)
             end
         end
     end)
 
-    -- Player State Updates
-    local playerStateEvent = Remotes.GetEvent("PlayerStateUpdated")
-    playerStateEvent.OnClientEvent:Connect(function(state: Types.PlayerMatchState)
+    Remotes.GetEvent("PlayerStateUpdated").OnClientEvent:Connect(function(state: Types.PlayerMatchState)
+        local color: Color3
         if state.team == "Passers" then
-            roleBadgeLabel.Text = if state.hasReachedEndZone then "ROLE: RUNNER - RETURN TO HOME BASE!" else "ROLE: RUNNER - REACH THE SAFEHOUSE!"
-            roleBadgeLabel.TextColor3 = PASSER_COLOR
+            roleLabel.Text = if state.hasReachedEndZone then "ROLE: RUNNER - RETURN TO HOME BASE!" else "ROLE: RUNNER - REACH THE SAFEHOUSE!"
+            color = PASSER_COLOR
         elseif state.team == "Guards" then
-            local roleName = if state.guardRole then state.guardRole else "Guard"
-            roleBadgeLabel.Text = `ROLE: GUARD ({roleName}) - DEFEND YOUR LINE!`
-            roleBadgeLabel.TextColor3 = GUARD_COLOR
+            roleLabel.Text = `ROLE: GUARD ({state.guardRole or "Guard"}) - DEFEND YOUR LINE!`
+            color = GUARD_COLOR
         else
-            roleBadgeLabel.Text = "ROLE: SPECTATOR"
-            roleBadgeLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+            roleLabel.Text = "ROLE: SPECTATOR"
+            color = C.Muted
+        end
+        if roleBadge.BackgroundColor3 ~= color then
+            TweenService:Create(roleBadge, M.Fade, { BackgroundColor3 = color }):Play()
+            UIKit.pop(roleLabel, 1.15)
         end
 
         if state.isTagged then
-            showBanner("YOU WERE TAGGED!", Color3.fromRGB(255, 60, 60))
+            showBanner("YOU WERE TAGGED!", Color3.fromRGB(200, 40, 50))
         end
     end)
 
-    -- Checkpoint Event
-    local checkpointEvent = Remotes.GetEvent("ZoneCheckpointReached")
-    checkpointEvent.OnClientEvent:Connect(function(targetUserId: number, zoneName: string, _score: number)
+    Remotes.GetEvent("ZoneCheckpointReached").OnClientEvent:Connect(function(targetUserId: number, zoneName: string, _score: number)
         if targetUserId == player.UserId then
-            showBanner(`{zoneName} REACHED! (+1)`, Color3.fromRGB(100, 255, 100))
+            showBanner(`{zoneName} REACHED! (+1)`, Color3.fromRGB(46, 160, 90))
         end
     end)
 
-    -- Tubig Scored Event!
-    local tubigEvent = Remotes.GetEvent("TubigScored")
-    tubigEvent.OnClientEvent:Connect(function(_targetUserId: number, playerName: string, _score: number)
-        showBanner(`TUBIG! {playerName} SCORED! (+5)`, Color3.fromRGB(255, 215, 0))
+    Remotes.GetEvent("TubigScored").OnClientEvent:Connect(function(_targetUserId: number, playerName: string, _score: number)
+        showBanner(`TUBIG! {playerName} SCORED! (+5)`, C.Teal, true)
     end)
 
     Remotes.GetEvent("TagConfirmed").OnClientEvent:Connect(function(taggerUserId: number)
