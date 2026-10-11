@@ -153,6 +153,7 @@ function CourtService.Init()
     createBarrier("BarrierEndBack", Vector3.new(courtConfig.TotalWidth + 40, barrierHeight, 2), Vector3.new(0, centerY + barrierHeight / 2, halfL + 25))
 
     CourtService.BuildNeighborhood(folder)
+    FilipinoStreetEnvironment.OptimizeDecor(folder)
 end
 
 -- Rows of houses just outside the invisible barriers so the court sits inside a real barangay street.

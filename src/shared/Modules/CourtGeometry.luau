@@ -11,7 +11,7 @@ local Config = require(ReplicatedStorage.Shared.Modules.Config)
 
 local CourtGeometry = {}
 
-function CourtGeometry.GetLineDefinitions(): { [Types.GuardRole]: Types.LineDefinition }
+local function buildLineDefinitions(): { [Types.GuardRole]: Types.LineDefinition }
     local court = Config.Court
     local halfLength = court.TotalLength / 2
     local halfWidth = court.TotalWidth / 2
@@ -57,7 +57,7 @@ function CourtGeometry.GetLineDefinitions(): { [Types.GuardRole]: Types.LineDefi
     return definitions
 end
 
-function CourtGeometry.GetZoneDefinitions(): { Types.ZoneBounds }
+local function buildZoneDefinitions(): { Types.ZoneBounds }
     local court = Config.Court
     local halfLength = court.TotalLength / 2
     local halfWidth = court.TotalWidth / 2
@@ -104,6 +104,18 @@ function CourtGeometry.GetZoneDefinitions(): { Types.ZoneBounds }
     }
 
     return zones
+end
+
+-- The court never changes at runtime, so build once and share (movement and zone checks call these every frame).
+local lineDefinitions = table.freeze(buildLineDefinitions())
+local zoneDefinitions = table.freeze(buildZoneDefinitions())
+
+function CourtGeometry.GetLineDefinitions(): { [Types.GuardRole]: Types.LineDefinition }
+    return lineDefinitions
+end
+
+function CourtGeometry.GetZoneDefinitions(): { Types.ZoneBounds }
+    return zoneDefinitions
 end
 
 --[[

@@ -33,6 +33,10 @@ local rarityLabel: TextLabel
 local descLabel: TextLabel
 local skillsLabel: TextLabel
 local spinButton: TextButton
+local panelStroke: UIStroke
+local revealFlash: Frame
+
+local PANEL_EDGE = Color3.fromRGB(70, 70, 85)
 
 local spinning = false
 local avatar: Model? = nil
@@ -125,6 +129,7 @@ local function showStyle(style: Types.StyleDef, withPose: boolean)
     skillsLabel.Text = `[Q] {q.name} ({q.cooldown}s)    [E] {e.name} ({e.cooldown}s)\n`
         .. `Speed x{style.speedMult}  ·  Stamina x{style.staminaMult}  ·  Reach +{style.reachBonus}`
     viewport.BackgroundColor3 = color:Lerp(Color3.new(0, 0, 0), 0.72)
+    panelStroke.Color = color:Lerp(PANEL_EDGE, 0.55)
     if withPose then
         playPose(style)
     end
@@ -182,6 +187,8 @@ local function spin()
     while os.clock() - started < 1.4 or not done do
         i += 1
         showStyle(Styles.List[i % #Styles.List + 1], false)
+        local pitch = 1.25 - math.min(os.clock() - started, 1.4) * 0.2 -- ticks drop in pitch as the roll slows
+        SoundController.PlaySFX("SpinTick", Vector2.new(pitch, pitch))
         task.wait(0.06 + (os.clock() - started) * 0.06)
     end
 
@@ -193,7 +200,24 @@ local function spin()
         viewportScale.Scale = 1.12
         TweenService:Create(viewportScale, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
         local big = style.rarity == "Epic" or style.rarity == "Legendary"
-        SoundController.PlaySFX(if big then "TubigFanfare" else "CheckpointChime")
+        if style.rarity == "Legendary" then
+            SoundController.PlaySFX("RevealBoom", Vector2.new(1, 1))
+        end
+        SoundController.PlaySFX(if big then "TubigFanfare" else "CheckpointChime",
+            if style.rarity == "Rare" then Vector2.new(1.15, 1.2) else nil)
+
+        -- Rarity-colored flash over the menu; rarer rolls flash harder
+        local color = Styles.RarityColors[style.rarity]
+        revealFlash.BackgroundColor3 = color
+        revealFlash.BackgroundTransparency = if big then 0.15 else 0.55
+        revealFlash.Visible = true
+        local fade = TweenService:Create(revealFlash, TweenInfo.new(if big then 0.9 else 0.5, Enum.EasingStyle.Quad), { BackgroundTransparency = 1 })
+        fade.Completed:Once(function()
+            revealFlash.Visible = false
+        end)
+        fade:Play()
+        panelStroke.Thickness = if big then 4 else 2.5
+        TweenService:Create(panelStroke, TweenInfo.new(0.8, Enum.EasingStyle.Quad), { Thickness = 1.5 }):Play()
     end
 end
 
@@ -231,6 +255,7 @@ local function buildUI()
     hintButton.Parent = gui
     Instance.new("UICorner").Parent = hintButton
     hintButton.Activated:Connect(function()
+        SoundController.PlaySFX("UIClick")
         setOpen(not panel.Visible)
     end)
 
@@ -244,10 +269,10 @@ local function buildUI()
     panel.Visible = false
     panel.Parent = gui
     Instance.new("UICorner").Parent = panel
-    local stroke = Instance.new("UIStroke")
-    stroke.Color = Color3.fromRGB(70, 70, 85)
-    stroke.Thickness = 1.5
-    stroke.Parent = panel
+    panelStroke = Instance.new("UIStroke")
+    panelStroke.Color = PANEL_EDGE
+    panelStroke.Thickness = 1.5
+    panelStroke.Parent = panel
     local sizeLimit = Instance.new("UISizeConstraint")
     sizeLimit.MaxSize = Vector2.new(780, 440)
     sizeLimit.Parent = panel
@@ -332,7 +357,20 @@ local function buildUI()
     local spinLimit = Instance.new("UITextSizeConstraint")
     spinLimit.MaxTextSize = 22
     spinLimit.Parent = spinButton
-    spinButton.Activated:Connect(spin)
+    spinButton.Activated:Connect(function()
+        SoundController.PlaySFX("UIClick")
+        spin()
+    end)
+
+    revealFlash = Instance.new("Frame")
+    revealFlash.Name = "RevealFlash"
+    revealFlash.Size = UDim2.fromScale(1, 1)
+    revealFlash.BorderSizePixel = 0
+    revealFlash.Visible = false
+    revealFlash.ZIndex = 10
+    revealFlash.Active = false
+    revealFlash.Parent = panel
+    Instance.new("UICorner").Parent = revealFlash
 
     local close = Instance.new("TextButton")
     close.AnchorPoint = Vector2.new(1, 0)
@@ -345,6 +383,7 @@ local function buildUI()
     close.Text = "X"
     close.Parent = panel
     close.Activated:Connect(function()
+        SoundController.PlaySFX("UIClick")
         setOpen(false)
     end)
 end

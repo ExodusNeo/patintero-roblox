@@ -5,9 +5,11 @@
     Chalk line highlights, asphalt slide dust bursts, and tag impact VFX.
 ]]
 
+local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Debris = game:GetService("Debris")
+local TweenService = game:GetService("TweenService")
 
 local Types = require(ReplicatedStorage.Shared.Modules.Types)
 local Remotes = require(ReplicatedStorage.Shared.Modules.Remotes)
@@ -80,6 +82,24 @@ local function createSlideDust(position: Vector3)
     Debris:AddItem(part, 1)
 end
 
+-- The tagged Passer flashes red for everyone else (they get their own camera shake and banner).
+local function flashTagged(targetUserId: number)
+    local target = Players:GetPlayerByUserId(targetUserId)
+    local character = if target and target ~= Players.LocalPlayer then target.Character else nil
+    if not character then return end
+
+    local flash = Instance.new("Highlight")
+    flash.FillColor = Color3.fromRGB(255, 60, 60)
+    flash.OutlineColor = Color3.new(1, 1, 1)
+    flash.FillTransparency = 0.2
+    flash.Parent = character
+    TweenService:Create(flash, TweenInfo.new(0.7, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+        FillTransparency = 1,
+        OutlineTransparency = 1,
+    }):Play()
+    Debris:AddItem(flash, 0.75)
+end
+
 local function highlightGuardLine(guardRole: Types.GuardRole?)
     local court = Workspace:FindFirstChild("PatinteroCourt")
     if not court then return end
@@ -117,8 +137,9 @@ function CourtVFXController.Init()
 
     -- Tag impact burst
     local tagConfirmedEvent = Remotes.GetEvent("TagConfirmed")
-    tagConfirmedEvent.OnClientEvent:Connect(function(_taggerId: number, _targetId: number, hitPos: Vector3)
+    tagConfirmedEvent.OnClientEvent:Connect(function(_taggerId: number, targetId: number, hitPos: Vector3)
         createHitBurst(hitPos)
+        flashTagged(targetId)
     end)
 
     -- Cosmetic action (Slide dust)
