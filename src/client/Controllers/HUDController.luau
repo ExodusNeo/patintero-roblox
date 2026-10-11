@@ -1,9 +1,10 @@
 --!strict
 --[[
     HUDController.luau
-    Match HUD in the "night court" style (UIKit): a broadcast scoreboard with the Red/Blue scores and the
-    round clock, the role tag, crosshair + hit marker, the stamina bar, and broadcast strips for events
-    ("TUBIG!", zones, tags, the winner).
+    Match HUD in the "Kanto Night" style (UIKit): a torn scoreboard patch with the Red/Blue scores over
+    chalk team marks (an amber scribble under your side), the clock and round ticks, the role line,
+    crosshair + hit marker, the chalk stamina stroke, and painted callouts for events
+    ("TUBIG!", zones, tags, the winner). Layout follows the 1366x768 mockup.
 ]]
 
 local Players = game:GetService("Players")
@@ -15,8 +16,8 @@ local Remotes = require(ReplicatedStorage.Shared.Modules.Remotes)
 local MovementController = require(script.Parent.MovementController)
 local UIKit = require(script.Parent.UIKit)
 
-local C, F, M = UIKit.Color, UIKit.Font, UIKit.Motion
-local make, text = UIKit.make, UIKit.text
+local C, F, M, A = UIKit.Color, UIKit.Font, UIKit.Motion, UIKit.Art
+local make, text, art = UIKit.make, UIKit.text, UIKit.art
 
 local HUDController = {}
 
@@ -25,76 +26,69 @@ local playerGui = player:WaitForChild("PlayerGui") :: PlayerGui
 
 local PASSER_COLOR = Color3.fromRGB(79, 184, 240)
 local GUARD_COLOR = Color3.fromRGB(240, 122, 58)
-local SIDE_COLORS: { [Types.Side]: Color3 } = { Red = Color3.fromRGB(201, 58, 63), Blue = Color3.fromRGB(52, 113, 217) }
-local STAMINA_LOW, STAMINA_MID, STAMINA_HIGH = C.Signal, C.Amber, Color3.fromRGB(88, 196, 120)
+local SIDE_COLORS: { [Types.Side]: Color3 } = { Red = Color3.fromRGB(210, 69, 63), Blue = Color3.fromRGB(61, 123, 224) }
+local ROUNDS = 2 -- MatchService plays two rounds
+local STAMINA_WIDTH = 243
+local CALLOUT_SIZE = UDim2.fromOffset(610, 112)
 
-type ScoreBlock = { frame: Frame, number: TextLabel, mark: Frame }
+type ScoreBlock = { number: TextLabel, mine: ImageLabel }
 
-local phaseLabel: TextLabel
-local timerLabel: TextLabel
+local clockLabel: TextLabel
+local ticks: { ImageLabel } = {}
 local scoreBlocks: { [Types.Side]: ScoreBlock } = {}
-local roleAccent: Frame
-local roleLabel: TextLabel
-local staminaFill: Frame
+local roleName: TextLabel
+local roleHint: TextLabel
+local staminaClip: Frame
+local staminaFill: ImageLabel
 local hitMarker: Frame
 local hitRing: UIStroke
 local hitScale: UIScale
-local banner: CanvasGroup
-local bannerBody: Frame
-local bannerAccent: Frame
-local bannerRays: ImageLabel
-local bannerLabel: TextLabel
+local callout: CanvasGroup
+local calloutClip: Frame
+local calloutPaint: ImageLabel
+local calloutTitle: TextLabel
+local calloutSub: TextLabel
 
-local bannerToken = 0
-local bannerTweens: { Tween } = {}
-
--- Fades a strip out at both ends, like a broadcast graphic
-local EDGE_FADE = NumberSequence.new({
-    NumberSequenceKeypoint.new(0, 1),
-    NumberSequenceKeypoint.new(0.14, 0),
-    NumberSequenceKeypoint.new(0.86, 0),
-    NumberSequenceKeypoint.new(1, 1),
-})
+local calloutToken = 0
+local calloutFade: Tween? = nil
 
 local function formatTime(seconds: number): string
-    return string.format("%02d:%02d", math.floor(seconds / 60), seconds % 60)
+    return string.format("%d:%02d", seconds // 60, seconds % 60)
 end
 
--- Broadcast strip: slides in from the left, holds, slides on to the right and fades.
--- `big` adds slow rays behind it (Tubig, the winner). A newer strip takes over cleanly.
-local function showBanner(message: string, color: Color3, big: boolean?)
-    bannerToken += 1
-    local token = bannerToken
-    for _, tween in bannerTweens do
-        tween:Cancel()
+-- Painted callout: the plate brushes on left to right, the word slams in, holds, then fades.
+-- Light paint gets ink lettering, dark paint chalk. A newer callout takes over cleanly.
+local function showCallout(title: string, sub: string?, paint: Color3, big: boolean?)
+    calloutToken += 1
+    local token = calloutToken
+    if calloutFade then
+        calloutFade:Cancel()
+        calloutFade = nil
     end
-    table.clear(bannerTweens)
 
-    bannerLabel.Text = string.upper(message) -- broadcast caps, whatever case the zone/player name arrives in
-    bannerAccent.BackgroundColor3 = color
-    bannerRays.ImageColor3 = color
-    bannerRays.Visible = big == true
-    banner.Visible = true
-    banner.GroupTransparency = 1
-    bannerBody.Position = UDim2.new(0.5, -60, 0.5, 0)
-    TweenService:Create(banner, M.Fade, { GroupTransparency = 0 }):Play()
-    TweenService:Create(bannerBody, M.Slide, { Position = UDim2.fromScale(0.5, 0.5) }):Play()
-    UIKit.pop(bannerLabel, 1.08)
+    local light = paint.R * 0.299 + paint.G * 0.587 + paint.B * 0.114 > 0.5
+    calloutPaint.ImageColor3 = paint
+    calloutTitle.TextColor3 = if light then C.Ink else C.Chalk
+    calloutTitle.Text = string.upper(title) -- zone and side names arrive in any case
+    calloutSub.Text = sub or ""
+    callout.Visible = true
+    callout.GroupTransparency = 0
+    UIKit.wipe(calloutClip, CALLOUT_SIZE, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out))
+    UIKit.pop(calloutTitle, 1.3)
+    if big then
+        UIKit.shake(callout, 5)
+    end
 
     task.delay(1.9, function()
-        if token ~= bannerToken then return end
-        bannerTweens = {
-            TweenService:Create(banner, M.Slide, { GroupTransparency = 1 }),
-            TweenService:Create(bannerBody, M.Slide, { Position = UDim2.new(0.5, 60, 0.5, 0) }),
-        }
-        bannerTweens[1].Completed:Connect(function(state)
-            if state == Enum.PlaybackState.Completed and token == bannerToken then
-                banner.Visible = false
+        if token ~= calloutToken then return end
+        local fade = TweenService:Create(callout, M.Slide, { GroupTransparency = 1 })
+        fade.Completed:Connect(function(state)
+            if state == Enum.PlaybackState.Completed and token == calloutToken then
+                callout.Visible = false
             end
         end)
-        for _, tween in bannerTweens do
-            tween:Play()
-        end
+        calloutFade = fade
+        fade:Play()
     end)
 end
 
@@ -114,39 +108,41 @@ local function showHitMarker()
     fade:Play()
 end
 
-local function makeScoreBlock(parent: Frame, side: Types.Side, alignRight: boolean): ScoreBlock
-    local frame: Frame = make("Frame", {
-        Name = `{side}Score`,
-        AnchorPoint = Vector2.new(if alignRight then 1 else 0, 0),
-        Position = UDim2.new(if alignRight then 1 else 0, if alignRight then -12 else 12, 0, 12),
-        Size = UDim2.fromOffset(92, 62),
-        BackgroundColor3 = SIDE_COLORS[side]:Lerp(C.Deep, 0.3),
-    }, parent)
-    UIKit.corner(frame, 3)
-    UIKit.wash(frame, 0.75)
-    text({ Text = string.upper(side), FontFace = F.Label, TextSize = 12, TextColor3 = C.Chalk, TextTransparency = 0.2, Size = UDim2.new(1, 0, 0, 16), Position = UDim2.fromOffset(0, 4) }, frame)
+-- Score on the patch with its team's chalk mark below; `x` is the column center on the patch
+local function makeScore(board: Frame, side: Types.Side, x: number): ScoreBlock
     local number = text({
-        Name = "Number",
+        Name = `{side}Score`,
         Text = "0",
         FontFace = F.Display,
-        TextSize = 34,
-        AnchorPoint = Vector2.new(0.5, 1),
-        Position = UDim2.new(0.5, 0, 1, -2),
-        Size = UDim2.new(1, 0, 0, 40),
-    }, frame)
-    -- Your own side gets an amber underline
-    local mark: Frame = make("Frame", {
+        TextSize = 50,
         AnchorPoint = Vector2.new(0.5, 0),
-        Position = UDim2.new(0.5, 0, 1, 4),
-        Size = UDim2.new(1, -16, 0, 3),
-        BackgroundColor3 = C.Amber,
-        BorderSizePixel = 0,
-        Visible = false,
-    }, frame)
-    return { frame = frame, number = number, mark = mark }
+        Position = UDim2.fromOffset(x, 2),
+        Size = UDim2.fromOffset(80, 62),
+        ZIndex = 2,
+    }, board)
+    art(A.TeamMark, { ImageColor3 = SIDE_COLORS[side], AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.fromOffset(x, 59), Size = UDim2.fromOffset(73, 18), ZIndex = 2 }, board)
+    local mine = art(A.YourSide, { ImageColor3 = C.Sodium, AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.fromOffset(x, 69), Size = UDim2.fromOffset(68, 13), ZIndex = 3, Visible = false }, board)
+    return { number = number, mine = mine }
+end
+
+-- Dark gradients behind the top and bottom HUD so it reads over a bright court
+local function buildScrims()
+    local gui: ScreenGui = make("ScreenGui", { Name = "HUDScrim", ResetOnSpawn = false, IgnoreGuiInset = true, ScreenInsets = Enum.ScreenInsets.None, DisplayOrder = -1 }, nil)
+    for _, spec in { { y = 0, h = 0.26, from = 0.4, to = 1 }, { y = 1, h = 0.22, from = 1, to = 0.45 } } do
+        local scrim: Frame = make("Frame", {
+            AnchorPoint = Vector2.new(0, spec.y),
+            Position = UDim2.fromScale(0, spec.y),
+            Size = UDim2.fromScale(1, spec.h),
+            BackgroundColor3 = C.Ink,
+            BorderSizePixel = 0,
+        }, gui)
+        make("UIGradient", { Rotation = 90, Transparency = NumberSequence.new(spec.from, spec.to) }, scrim)
+    end
+    gui.Parent = playerGui
 end
 
 local function buildUI()
+    buildScrims()
     local gui: ScreenGui = make("ScreenGui", {
         Name = "PatinteroHUD",
         ResetOnSpawn = false,
@@ -154,75 +150,61 @@ local function buildUI()
         ScreenInsets = Enum.ScreenInsets.CoreUISafeInsets,
     }, nil)
 
-    -- Scoreboard: scores on the sides, phase + clock in the middle
+    -- Scoreboard patch: Red | clock + round ticks | Blue, the role line hanging below it
     local board: Frame = make("Frame", {
-        Name = "TopBar",
+        Name = "Scoreboard",
         AnchorPoint = Vector2.new(0.5, 0),
-        Position = UDim2.new(0.5, 0, 0, 12),
-        Size = UDim2.fromOffset(440, 86),
-        BackgroundColor3 = C.Night,
-        BackgroundTransparency = 0.06,
+        Position = UDim2.new(0.5, 0, 0, 9),
+        Size = UDim2.fromOffset(434, 86),
+        BackgroundTransparency = 1,
     }, gui)
-    UIKit.wash(board, 0.8)
-    UIKit.panel(board)
     UIKit.fitScreen(board)
+    art(A.Patch, { ImageColor3 = C.Patch, ImageTransparency = 0.18 }, board)
 
-    scoreBlocks.Red = makeScoreBlock(board, "Red", false)
-    scoreBlocks.Blue = makeScoreBlock(board, "Blue", true)
+    scoreBlocks.Red = makeScore(board, "Red", 74)
+    scoreBlocks.Blue = makeScore(board, "Blue", 360)
 
-    phaseLabel = text({
-        Name = "Phase",
-        Text = "LOBBY",
-        FontFace = F.Label,
-        TextSize = 13,
-        TextColor3 = C.Dim,
-        AnchorPoint = Vector2.new(0.5, 0),
-        Position = UDim2.new(0.5, 0, 0, 10),
-        Size = UDim2.fromOffset(224, 16),
-    }, board)
-    timerLabel = text({
-        Name = "Timer",
-        Text = "WAITING FOR PLAYERS...",
-        FontFace = F.Display,
+    clockLabel = text({
+        Name = "Clock",
+        Text = "WAITING",
+        FontFace = F.Number,
         TextScaled = true,
         AnchorPoint = Vector2.new(0.5, 0),
-        Position = UDim2.new(0.5, 0, 0, 26),
-        Size = UDim2.fromOffset(224, 50),
+        Position = UDim2.fromOffset(217, 9),
+        Size = UDim2.fromOffset(180, 50),
+        ZIndex = 2,
     }, board)
-    make("UITextSizeConstraint", { MaxTextSize = 46 }, timerLabel)
+    make("UITextSizeConstraint", { MaxTextSize = math.round(40 * UIKit.EM) }, clockLabel)
+    for i = 1, ROUNDS do
+        ticks[i] = art(A.Tick, { Position = UDim2.fromOffset(217 - ROUNDS * 12 + (i - 1) * 24 - 2, 58), Size = UDim2.fromOffset(28, 14), ImageColor3 = C.Chalk, ZIndex = 2 }, board)
+    end
 
-    -- Role tag under the scoreboard, with an accent bar in the role's color
     local role: Frame = make("Frame", {
-        Name = "RoleBadge",
+        Name = "Role",
         AnchorPoint = Vector2.new(0.5, 0),
-        Position = UDim2.new(0.5, 0, 1, 12),
-        Size = UDim2.fromOffset(0, 28),
+        Position = UDim2.new(0.5, 0, 1, 5),
+        Size = UDim2.fromOffset(0, 27),
         AutomaticSize = Enum.AutomaticSize.X,
-        BackgroundColor3 = C.Night,
-        BackgroundTransparency = 0.1,
+        BackgroundTransparency = 1,
     }, board)
-    roleAccent = (UIKit.panel(role, C.Dim, "Left", 3)) :: Frame
-    roleLabel = text({
-        Text = "ROLE: SPECTATOR",
-        FontFace = F.Label,
-        TextSize = 14,
-        Size = UDim2.fromScale(0, 1),
-        AutomaticSize = Enum.AutomaticSize.X,
-    }, role)
-    -- Padding on the text, not the tag, so the accent bar stays on the tag's edge
-    make("UIPadding", { PaddingLeft = UDim.new(0, 14), PaddingRight = UDim.new(0, 12) }, roleLabel)
+    make("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder }, role)
+    roleName = text({ LayoutOrder = 1, Text = "Spectating", FontFace = F.Bold, TextSize = 18, TextColor3 = C.Dim, Size = UDim2.fromScale(0, 1), AutomaticSize = Enum.AutomaticSize.X }, role)
+    roleHint = text({ LayoutOrder = 2, Text = "", FontFace = F.Body, TextSize = 18, TextTransparency = 0.1, Size = UDim2.fromScale(0, 1), AutomaticSize = Enum.AutomaticSize.X }, role)
+    -- Faint ink outline: the line sits below the scrim and has to read against bright sky
+    UIKit.stroke(roleName, C.Ink, 1, 0.5)
+    UIKit.stroke(roleHint, C.Ink, 1, 0.5)
 
-    -- Crosshair + hit marker
+    -- Crosshair dot + hit marker
     local crosshair: Frame = make("Frame", {
         Name = "Crosshair",
         AnchorPoint = Vector2.new(0.5, 0.5),
         Position = UDim2.fromScale(0.5, 0.5),
-        Size = UDim2.fromOffset(4, 4),
+        Size = UDim2.fromOffset(5, 5),
         BackgroundColor3 = C.Chalk,
-        BackgroundTransparency = 0.25,
+        BackgroundTransparency = 0.1,
+        BorderSizePixel = 0,
     }, gui)
-    UIKit.corner(crosshair, 2)
-    UIKit.stroke(crosshair, C.Deep, 1, 0.4)
+    make("UICorner", { CornerRadius = UDim.new(1, 0) }, crosshair)
     hitMarker = make("Frame", {
         Name = "HitMarker",
         AnchorPoint = Vector2.new(0.5, 0.5),
@@ -235,69 +217,51 @@ local function buildUI()
     hitRing = UIKit.stroke(hitMarker, C.Signal, 2.5)
     hitScale = make("UIScale", {}, hitMarker)
 
-    -- Thin stamina bar
+    -- Stamina: a faint chalk stroke, drawn over in bright chalk up to the current amount
     local stamina: Frame = make("Frame", {
         Name = "Stamina",
         AnchorPoint = Vector2.new(0.5, 1),
-        Position = UDim2.new(0.5, 0, 1, -28),
-        Size = UDim2.fromOffset(260, 6),
-        BackgroundColor3 = C.Deep,
-        BackgroundTransparency = 0.1,
+        Position = UDim2.new(0.5, 0, 1, -33),
+        Size = UDim2.fromOffset(STAMINA_WIDTH, 13),
+        BackgroundTransparency = 1,
     }, gui)
-    UIKit.corner(stamina, 2)
-    UIKit.stroke(stamina, C.Steel, 1, 0.2)
     UIKit.fitScreen(stamina)
-    staminaFill = make("Frame", { Name = "Fill", Size = UDim2.fromScale(1, 1), BackgroundColor3 = STAMINA_HIGH, BorderSizePixel = 0 }, stamina)
-    UIKit.corner(staminaFill, 2)
+    art(A.Stroke, { ImageColor3 = C.Chalk, ImageTransparency = 0.65 }, stamina)
+    staminaClip = make("Frame", { Name = "Fill", Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, ClipsDescendants = true }, stamina)
+    staminaFill = art(A.Stroke, { Size = UDim2.fromOffset(STAMINA_WIDTH, 13), ImageColor3 = C.Chalk, ImageTransparency = 0.05 }, staminaClip)
 
-    -- Event strip
-    banner = make("CanvasGroup", {
-        Name = "Banner",
-        AnchorPoint = Vector2.new(0.5, 0.5),
-        Position = UDim2.fromScale(0.5, 0.32),
-        Size = UDim2.fromOffset(900, 220),
+    -- Event callout: paint plate, big word, a line under it
+    callout = make("CanvasGroup", {
+        Name = "Callout",
+        AnchorPoint = Vector2.new(0.5, 0),
+        Position = UDim2.fromScale(0.5, 0.31),
+        Size = UDim2.fromOffset(610, 150),
         BackgroundTransparency = 1,
         Visible = false,
     }, gui)
-    UIKit.fitScreen(banner)
-    bannerBody = make("Frame", {
+    UIKit.fitScreen(callout)
+    calloutClip = make("Frame", { Size = CALLOUT_SIZE, BackgroundTransparency = 1, ClipsDescendants = true }, callout)
+    calloutPaint = art(A.Callout, { Size = CALLOUT_SIZE }, calloutClip)
+    -- The mockup's 92 px word is past Roblox's TextSize cap: scale its holder up instead
+    local big = 92 * UIKit.EM / 100
+    local titleHolder: Frame = make("Frame", {
         AnchorPoint = Vector2.new(0.5, 0.5),
-        Position = UDim2.fromScale(0.5, 0.5),
-        Size = UDim2.fromScale(1, 1),
+        Position = UDim2.fromOffset(305, 58),
+        Size = UDim2.fromOffset(560 / big, 100),
         BackgroundTransparency = 1,
-    }, banner)
-    bannerRays = make("ImageLabel", {
-        AnchorPoint = Vector2.new(0.5, 0.5),
-        Position = UDim2.fromScale(0.5, 0.5),
-        Size = UDim2.fromOffset(260, 260),
-        BackgroundTransparency = 1,
-        Image = UIKit.Image.Rays,
-        ImageTransparency = 0.72,
-        Visible = false,
-    }, bannerBody)
-    UIKit.spin(bannerRays, 20)
-    local strip: Frame = make("Frame", {
-        AnchorPoint = Vector2.new(0.5, 0.5),
-        Position = UDim2.fromScale(0.5, 0.5),
-        Size = UDim2.fromOffset(820, 74),
-        BackgroundColor3 = C.Night,
-        BackgroundTransparency = 0.05,
-        BorderSizePixel = 0,
-    }, bannerBody)
-    make("UIGradient", { Transparency = EDGE_FADE }, strip)
-    bannerAccent = make("Frame", { Size = UDim2.new(1, 0, 0, 2), BackgroundColor3 = C.Chalk, BorderSizePixel = 0 }, strip)
-    make("UIGradient", { Transparency = EDGE_FADE }, bannerAccent)
-    local underline: Frame = make("Frame", { AnchorPoint = Vector2.new(0, 1), Position = UDim2.fromScale(0, 1), Size = UDim2.new(1, 0, 0, 1), BackgroundColor3 = C.Steel, BorderSizePixel = 0 }, strip)
-    make("UIGradient", { Transparency = EDGE_FADE }, underline)
-    bannerLabel = text({
-        Text = "",
-        FontFace = F.Display,
-        TextScaled = true,
-        AnchorPoint = Vector2.new(0.5, 0.5),
-        Position = UDim2.fromScale(0.5, 0.52),
-        Size = UDim2.fromOffset(600, 46),
-    }, strip)
-    make("UITextSizeConstraint", { MaxTextSize = 38 }, bannerLabel)
+        ZIndex = 2,
+    }, callout)
+    make("UIScale", { Scale = big }, titleHolder)
+    calloutTitle = text({ FontFace = F.Display, TextScaled = true, Size = UDim2.fromScale(1, 1), ZIndex = 2 }, titleHolder)
+    calloutSub = text({
+        FontFace = F.Bold,
+        TextSize = 20,
+        AnchorPoint = Vector2.new(0.5, 0),
+        Position = UDim2.fromOffset(305, 112),
+        Size = UDim2.fromOffset(600, 28),
+        ZIndex = 2,
+    }, callout)
+    UIKit.stroke(calloutSub, C.Ink, 1, 0.5)
 
     gui.Parent = playerGui
 end
@@ -305,27 +269,35 @@ end
 local function renderOwnSide()
     local mine = player:GetAttribute("Side")
     for side, block in scoreBlocks do
-        block.mark.Visible = side == mine
+        block.mine.Visible = side == mine
+    end
+end
+
+local function renderRound(round: number)
+    for i, tick in ticks do
+        tick.ImageTransparency = if i <= round then 0.05 else 0.72
     end
 end
 
 function HUDController.Init()
     buildUI()
     renderOwnSide()
+    renderRound(0)
     player:GetAttributeChangedSignal("Side"):Connect(renderOwnSide)
 
-    -- Stamina: smooth green -> amber -> red, flickering when nearly empty
+    -- Stamina: chalk, turning sodium amber below half and signal red (flickering) when nearly empty
     MovementController.SetStaminaChangedCallback(function(current: number, max: number)
         local ratio = math.clamp(current / max, 0, 1)
-        staminaFill.Size = UDim2.fromScale(ratio, 1)
-        staminaFill.BackgroundColor3 = if ratio > 0.5
-            then STAMINA_MID:Lerp(STAMINA_HIGH, (ratio - 0.5) * 2)
-            else STAMINA_LOW:Lerp(STAMINA_MID, ratio * 2)
-        staminaFill.BackgroundTransparency = if ratio < 0.25 then 0.1 + 0.4 * (0.5 + 0.5 * math.sin(os.clock() * 12)) else 0
+        staminaClip.Size = UDim2.fromScale(ratio, 1)
+        staminaFill.ImageColor3 = if ratio > 0.5
+            then C.Sodium:Lerp(C.Chalk, (ratio - 0.5) * 2)
+            else C.Signal:Lerp(C.Sodium, ratio * 2)
+        staminaFill.ImageTransparency = if ratio < 0.25 then 0.05 + 0.4 * (0.5 + 0.5 * math.sin(os.clock() * 12)) else 0.05
     end)
 
     local scores: { [Types.Side]: number } = { Red = 0, Blue = 0 }
     local lastTick = -1
+    local lastRound = -1
     Remotes.GetEvent("MatchStateUpdated").OnClientEvent:Connect(function(state: Types.MatchState)
         for side, value in { Red = state.redScore, Blue = state.blueScore } :: { [Types.Side]: number } do
             if value ~= scores[side] then
@@ -334,40 +306,39 @@ function HUDController.Init()
                 UIKit.pop(scoreBlocks[side].number, 1.2)
             end
         end
+        if state.roundNumber ~= lastRound then
+            lastRound = state.roundNumber
+            renderRound(state.roundNumber)
+        end
 
-        timerLabel.TextColor3 = C.Chalk
+        clockLabel.TextColor3 = C.Chalk
         if state.phase == "Lobby" then
-            phaseLabel.Text = "LOBBY"
-            timerLabel.Text = "WAITING FOR PLAYERS..."
+            clockLabel.Text = "WAITING"
         elseif state.phase == "Countdown" then
-            phaseLabel.Text = "ROUND STARTING IN"
-            timerLabel.Text = tostring(state.timeRemaining)
+            clockLabel.Text = tostring(state.timeRemaining)
             if state.timeRemaining ~= lastTick then
                 lastTick = state.timeRemaining
-                UIKit.pop(timerLabel, 1.25)
+                UIKit.pop(clockLabel, 1.25)
             end
         elseif state.phase == "RoundActive" then
-            phaseLabel.Text = `ROUND {state.roundNumber}`
-            timerLabel.Text = formatTime(state.timeRemaining)
+            clockLabel.Text = formatTime(state.timeRemaining)
             -- Last 10 seconds: the clock turns signal red and snaps each second
             if state.timeRemaining <= 10 then
-                timerLabel.TextColor3 = C.Signal
+                clockLabel.TextColor3 = C.Signal
                 if state.timeRemaining ~= lastTick then
                     lastTick = state.timeRemaining
-                    UIKit.pop(timerLabel, 1.15)
+                    UIKit.pop(clockLabel, 1.15)
                 end
             end
         elseif state.phase == "RoundEnded" then
-            phaseLabel.Text = "ROUND ENDED"
-            timerLabel.Text = "SWAPPING SIDES!"
+            clockLabel.Text = "SWAP SIDES"
         elseif state.phase == "MatchOver" then
-            phaseLabel.Text = ""
-            timerLabel.Text = "MATCH OVER!"
+            clockLabel.Text = "MATCH OVER"
             local winner: Types.Side? = if state.redScore > state.blueScore then "Red" elseif state.blueScore > state.redScore then "Blue" else nil
             if winner then
-                showBanner(`{string.upper(winner)} WINS!`, SIDE_COLORS[winner], true)
+                showCallout(`{winner} wins`, nil, SIDE_COLORS[winner], true)
             else
-                showBanner("MATCH DRAW!", C.Chalk, true)
+                showCallout("Draw", nil, C.Dim, true)
             end
         end
     end)
@@ -375,33 +346,39 @@ function HUDController.Init()
     Remotes.GetEvent("PlayerStateUpdated").OnClientEvent:Connect(function(state: Types.PlayerMatchState)
         local color: Color3
         if state.team == "Passers" then
-            roleLabel.Text = if state.hasReachedEndZone then "ROLE: RUNNER - RETURN TO HOME BASE!" else "ROLE: RUNNER - REACH THE SAFEHOUSE!"
+            roleName.Text = "Runner"
+            roleHint.Text = if state.hasReachedEndZone then "back to home base" else "reach the safehouse"
             color = PASSER_COLOR
         elseif state.team == "Guards" then
-            roleLabel.Text = `ROLE: GUARD ({state.guardRole or "Guard"}) - DEFEND YOUR LINE!`
+            roleName.Text = "Guard"
+            local line = (string.gsub(state.guardRole or "your line", "(%a)(%d)", "%1 %2")) -- "Line2" -> "Line 2"
+            roleHint.Text = `defend {line}`
             color = GUARD_COLOR
         else
-            roleLabel.Text = "ROLE: SPECTATOR"
+            roleName.Text = "Spectating"
+            roleHint.Text = ""
             color = C.Dim
         end
-        if roleAccent.BackgroundColor3 ~= color then
-            TweenService:Create(roleAccent, M.Fade, { BackgroundColor3 = color }):Play()
-            UIKit.pop(roleLabel, 1.08)
+        if roleName.TextColor3 ~= color then
+            TweenService:Create(roleName, M.Fade, { TextColor3 = color }):Play()
+            UIKit.pop(roleName, 1.12)
         end
 
         if state.isTagged then
-            showBanner("YOU WERE TAGGED!", C.Signal)
+            showCallout("Tagged!", nil, C.Signal)
         end
     end)
 
     Remotes.GetEvent("ZoneCheckpointReached").OnClientEvent:Connect(function(targetUserId: number, zoneName: string, _score: number)
         if targetUserId == player.UserId then
-            showBanner(`{zoneName} REACHED! (+1)`, PASSER_COLOR)
+            -- "Zone 2 (Second Quarter)" -> "Zone 2", "Safehouse / End Zone" -> "Safehouse"
+            local short = string.match(zoneName, "^(.-)%s*[(/]") or zoneName
+            showCallout(short, "+1", PASSER_COLOR)
         end
     end)
 
     Remotes.GetEvent("TubigScored").OnClientEvent:Connect(function(_targetUserId: number, playerName: string, _score: number)
-        showBanner(`TUBIG! {playerName} SCORED! (+5)`, C.Amber, true)
+        showCallout("Tubig!", `{playerName} scored +5`, C.Sodium, true)
     end)
 
     Remotes.GetEvent("TagConfirmed").OnClientEvent:Connect(function(taggerUserId: number)

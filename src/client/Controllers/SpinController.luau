@@ -1,19 +1,20 @@
 --!strict
 --[[
     SpinController.luau
-    Hub-only Styles menu (G or the STYLES button), in the "night court" style (UIKit):
-    - a showcase of your own avatar looping the style's dance (StyleAnimator) over faint rays
-    - the style's name, rarity, skills and passives, and the roll odds per tier as bars
-    - SPIN: names shuffle and tick, then the reveal lands with a shockwave ring and a flash
+    Hub-only Styles menu (G or the STYLES button), in the "Kanto Night" style (UIKit), laid out on the
+    1366x768 mockup and scaled to the screen:
+    - your own avatar under a sodium streetlamp, looping the style's dance (StyleAnimator)
+    - the style's rarity, name (chalk underline), description, skills, passives and the roll odds per tier
+    - SPIN on a brushed paint plate: names shuffle and tick while the lamp flickers, then the reveal lands
+      with the lamp flaring in the rarity color, a shockwave ring and a flash
       (Legendary: a double ring, a shake and a blur pulse)
-    Opening blurs the world behind the board. The SPIN button is Modal so the mouse is free even if
+    Opening blurs the world behind the menu. The SPIN button is Modal so the mouse is free even if
     the camera is mouse-locked.
 ]]
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local GuiService = game:GetService("GuiService")
-local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 
@@ -25,48 +26,47 @@ local SoundController = require(script.Parent.SoundController)
 local StyleAnimator = require(script.Parent.StyleAnimator)
 local UIKit = require(script.Parent.UIKit)
 
-local C, F, M = UIKit.Color, UIKit.Font, UIKit.Motion
-local make, text = UIKit.make, UIKit.text
+local C, F, M, A = UIKit.Color, UIKit.Font, UIKit.Motion, UIKit.Art
+local make, text, art = UIKit.make, UIKit.text, UIKit.art
 
 local SpinController = {}
 
 local player = Players.LocalPlayer
 
-local DESIGN = Vector2.new(860, 500) -- the board is laid out at this size, then scaled to fit the screen
-local PODIUM_TOP = -3
+local DESIGN = Vector2.new(1366, 768) -- the menu is laid out at the mockup's size, then scaled to fit the screen
+local PODIUM_TOP = -3 -- feet height of the preview avatar
+local CONE_REST = 0.66 -- light cone transparency when the lamp is steady
+local UNDERLINE = UDim2.fromScale(1.03, 0.14) -- of the name label, so it always spans the name
 
-type SkillCard = { icon: ImageLabel, accent: Frame, name: TextLabel, cooldown: TextLabel }
+type SkillRow = { icon: ImageLabel, name: TextLabel, cooldown: TextLabel }
 
 local backdrop: Frame
+local flash: Frame
 local holder: Frame
 local panel: Frame
 local openScale: UIScale
-local boardAccent: Frame
+local hintGui: ScreenGui
 local hintButton: TextButton
 local hintCount: TextLabel
 local showcase: Frame
-local showcaseFill: CanvasGroup
-local showcaseEdge: UIStroke
-local rays: ImageLabel
-local raysTween: Tween?
+local lamp: ImageLabel
+local cone: ImageLabel
 local viewport: ViewportFrame
+local previewCamera: Camera
 local worldModel: WorldModel
-local revealFlash: Frame
+local rarityLabel: TextLabel
+local equippedLabel: TextLabel
 local nameLabel: TextLabel
 local nameGradient: UIGradient
 local nameSweep: Tween?
-local rarityChip: Frame
-local rarityText: TextLabel
-local equippedChip: Frame
+local underlineClip: Frame
 local descLabel: TextLabel
-local skillCards: { [Types.SkillSlot]: SkillCard } = {}
+local skillRows: { [Types.SkillSlot]: SkillRow } = {}
 local statValues: { TextLabel } = {}
-local oddsFills: { { fill: Frame, share: number } } = {}
 local spinButton: TextButton
+local spinPaint: ImageLabel
 local spinText: TextLabel
-local spinCount: Frame
-local spinCountText: TextLabel
-local spinSheen: Frame
+local spinCount: TextLabel
 
 local spinning = false
 local avatar: Model? = nil
@@ -79,6 +79,14 @@ end
 
 local function equippedId(): string
     return Styles.Get(player:GetAttribute("Style") :: string?).id
+end
+
+-- Frames the whole avatar (tall hats and weapons included) with headroom, feet on the light pool
+local function frameAvatar(height: number)
+    local h = math.max(height, 5.5) + 1.2
+    local distance = h / (2 * math.tan(math.rad(previewCamera.FieldOfView / 2)))
+    local center = PODIUM_TOP + h / 2 - 0.15
+    previewCamera.CFrame = CFrame.lookAt(Vector3.new(distance * 0.2, center + 0.6, -distance), Vector3.new(0, center, 0)) -- 3/4 view
 end
 
 -- Copy of your current character for the preview: scripts and sounds stripped (scripts would run
@@ -112,7 +120,8 @@ local function ensureAvatar()
     root.Anchored = true
     clone:PivotTo(CFrame.new()) -- faces -Z, toward the preview camera
     local box, size = clone:GetBoundingBox()
-    clone:PivotTo(CFrame.new(0, PODIUM_TOP - (box.Position.Y - size.Y / 2), 0)) -- stand on the podium, any avatar height
+    clone:PivotTo(CFrame.new(0, PODIUM_TOP - (box.Position.Y - size.Y / 2), 0)) -- feet on the light pool, any avatar height
+    frameAvatar(size.Y)
     clone.Parent = worldModel
     avatar, avatarSource = clone, character
 end
@@ -124,13 +133,6 @@ local function playPose(style: Types.StyleDef)
     if not avatar or posing == name then return end
     StyleAnimator.Play(avatar, name)
     posing = name
-end
-
-local function setRaySpeed(seconds: number)
-    if raysTween then
-        raysTween:Cancel()
-    end
-    raysTween = UIKit.spin(rays, seconds)
 end
 
 -- Epic and Legendary names get a cold light passing through the letters
@@ -163,25 +165,19 @@ local function showStyle(style: Types.StyleDef, withPose: boolean)
     local color = Styles.RarityColors[style.rarity]
     nameLabel.Text = string.upper(style.name)
     paintName(color, not spinning and (style.rarity == "Epic" or style.rarity == "Legendary"))
-    rarityChip.BackgroundColor3 = color
-    rarityText.Text = string.upper(style.rarity)
-    equippedChip.Visible = style.id == equippedId() and not spinning
+    rarityLabel.Text = style.rarity
+    rarityLabel.TextColor3 = color
+    equippedLabel.Visible = style.id == equippedId() and not spinning
     descLabel.Text = style.description
-    for slot, card in skillCards do
+    for slot, row in skillRows do
         local skill = if slot == "Q" then style.skills.Q else style.skills.E
-        card.icon.Image = UIKit.Icon[skill.kind] or ""
-        card.icon.ImageColor3 = color:Lerp(C.Chalk, 0.4)
-        card.accent.BackgroundColor3 = color
-        card.name.Text = skill.name
-        card.cooldown.Text = `{skill.cooldown}s`
+        row.icon.Image = UIKit.Icon[skill.kind] or ""
+        row.name.Text = skill.name
+        row.cooldown.Text = `{skill.cooldown}s cooldown`
     end
     statValues[1].Text = `x{style.speedMult}`
     statValues[2].Text = `x{style.staminaMult}`
     statValues[3].Text = `+{style.reachBonus}`
-    boardAccent.BackgroundColor3 = color
-    showcaseFill.BackgroundColor3 = color:Lerp(C.Deep, 0.88)
-    showcaseEdge.Color = color:Lerp(C.Steel, 0.55)
-    rays.ImageColor3 = color
     if withPose then
         playPose(style)
     end
@@ -193,21 +189,26 @@ local function refresh()
 
     -- The server sets Style the moment it rolls; keep the result hidden until the reveal.
     if spinning then
-        spinText.Text = "ROLLING..."
+        spinText.Text = "ROLLING"
         spinCount.Visible = false
-        spinSheen.Visible = false
-        spinButton.BackgroundColor3 = C.SignalDark
+        spinPaint.ImageColor3 = C.Sodium:Lerp(C.Ink, 0.35)
         return
     end
 
     showStyle(Styles.Get(equippedId()), panel.Visible)
     local canSpin = spins >= 1
-    spinText.Text = if canSpin then "SPIN" else "NO SPINS LEFT"
-    spinText.TextColor3 = if canSpin then C.Chalk else C.Dim
-    spinCount.Visible = canSpin
-    spinCountText.Text = tostring(spins)
-    spinSheen.Visible = canSpin and not UIKit.reducedMotion()
-    spinButton.BackgroundColor3 = if canSpin then C.Signal else C.Slab
+    spinText.Text = "SPIN"
+    spinCount.Visible = true
+    spinCount.Text = `{spins} left`
+    spinPaint.ImageColor3 = if canSpin then C.Sodium else C.Dim:Lerp(C.Ink, 0.45)
+end
+
+-- Steady sodium lamp, or a flicker frame while a roll is running
+local function setLamp(flicker: boolean)
+    local dim = if flicker and not UIKit.reducedMotion() then math.random() * 0.5 else 0
+    cone.ImageColor3 = C.Sodium
+    cone.ImageTransparency = CONE_REST + dim * (1 - CONE_REST)
+    lamp.ImageTransparency = 0.1 + dim
 end
 
 local function setOpen(open: boolean)
@@ -217,28 +218,25 @@ local function setOpen(open: boolean)
     if skillBar and skillBar:IsA("ScreenGui") then
         skillBar.Enabled = not open
     end
+    hintGui.Enabled = not open -- the menu has its own close; the button would sit over the rarity line
     UIKit.blur(open)
     if open then
         panel.Visible = true
         backdrop.Visible = true
-        TweenService:Create(backdrop, M.Fade, { BackgroundTransparency = 0.35 }):Play()
-        openScale.Scale = 0.96
-        panel.Position = UDim2.new(0.5, 0, 0.5, 16)
+        TweenService:Create(backdrop, M.Fade, { BackgroundTransparency = 0.1 }):Play()
+        openScale.Scale = 0.97
+        panel.Position = UDim2.fromOffset(0, 16)
         TweenService:Create(openScale, M.Snap, { Scale = 1 }):Play()
-        TweenService:Create(panel, M.Slide, { Position = UDim2.fromScale(0.5, 0.5) }):Play()
-        -- Odds bars fill in, one tier after another
-        for i, bar in oddsFills do
-            bar.fill.Size = UDim2.fromScale(0, 1)
-            TweenService:Create(bar.fill, TweenInfo.new(0.45, Enum.EasingStyle.Quint, Enum.EasingDirection.Out, 0, false, 0.1 + i * 0.06),
-                { Size = UDim2.fromScale(bar.share, 1) }):Play()
-        end
+        TweenService:Create(panel, M.Slide, { Position = UDim2.fromOffset(0, 0) }):Play()
+        UIKit.wipe(underlineClip, UNDERLINE, TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out, 0, false, 0.1)) -- chalk drawn under the name
+        setLamp(false)
         refresh()
         if UserInputService.GamepadEnabled then
             GuiService.SelectedObject = spinButton
         end
     else
         TweenService:Create(backdrop, M.Quick, { BackgroundTransparency = 1 }):Play()
-        local shrink = TweenService:Create(openScale, M.Quick, { Scale = 0.97 })
+        local shrink = TweenService:Create(openScale, M.Quick, { Scale = 0.98 })
         shrink.Completed:Once(function()
             panel.Visible = false
             backdrop.Visible = false
@@ -258,30 +256,32 @@ local function reveal(style: Types.StyleDef)
     local big = style.rarity == "Epic" or style.rarity == "Legendary"
     local color = Styles.RarityColors[style.rarity]
     showStyle(style, true)
-    setRaySpeed(30)
-    UIKit.pop(rays, if big then 1.4 else 1.2)
     UIKit.pop(nameLabel, 1.15)
-    UIKit.pop(rarityChip, 1.25)
+    UIKit.pop(rarityLabel, 1.25)
     UIKit.pop(viewport, 1.05)
-    UIKit.shockwave(showcaseFill, color, if big then 2.2 else 1.6)
-    -- The accent line sweeps across the board in the new rarity color
-    boardAccent.Size = UDim2.new(0, 0, 0, 2)
-    TweenService:Create(boardAccent, M.Slide, { Size = UDim2.new(1, -8, 0, 2) }):Play()
+    UIKit.shockwave(showcase, color, if big then 2.2 else 1.6)
+    UIKit.wipe(underlineClip, UNDERLINE)
+
+    -- The lamp flares in the rarity color, then settles back to sodium
+    cone.ImageColor3 = color
+    cone.ImageTransparency = if big then 0.1 else 0.35
+    lamp.ImageTransparency = 0
+    TweenService:Create(cone, TweenInfo.new(if big then 1.2 else 0.7, Enum.EasingStyle.Quad), { ImageColor3 = C.Sodium, ImageTransparency = CONE_REST }):Play()
 
     if style.rarity == "Legendary" then
         SoundController.PlaySFX("RevealBoom", Vector2.new(1, 1))
-        task.delay(0.12, UIKit.shockwave, showcaseFill, C.White, 2.6)
+        task.delay(0.12, UIKit.shockwave, showcase, C.White, 2.6)
         UIKit.shake(holder, 6)
         UIKit.blur(true, true)
     end
     SoundController.PlaySFX(if big then "TubigFanfare" else "CheckpointChime", if style.rarity == "Rare" then Vector2.new(1.15, 1.2) else nil)
 
-    revealFlash.BackgroundColor3 = color:Lerp(C.White, 0.3)
-    revealFlash.BackgroundTransparency = if big then 0.25 else 0.6
-    revealFlash.Visible = true
-    local fade = TweenService:Create(revealFlash, TweenInfo.new(if big then 0.7 else 0.4, Enum.EasingStyle.Quad), { BackgroundTransparency = 1 })
+    flash.BackgroundColor3 = color:Lerp(C.White, 0.3)
+    flash.BackgroundTransparency = if big then 0.55 else 0.8
+    flash.Visible = true
+    local fade = TweenService:Create(flash, TweenInfo.new(if big then 0.7 else 0.4, Enum.EasingStyle.Quad), { BackgroundTransparency = 1 })
     fade.Completed:Once(function()
-        revealFlash.Visible = false
+        flash.Visible = false
     end)
     fade:Play()
 end
@@ -290,7 +290,6 @@ local function spin()
     if spinning or getSpins() < 1 then return end
     spinning = true
     refresh()
-    setRaySpeed(4)
 
     local result: string? = nil
     local done = false
@@ -309,14 +308,17 @@ local function spin()
         i += 1
         showStyle(Styles.List[i % #Styles.List + 1], false)
         UIKit.pop(nameLabel, 1.04)
+        setLamp(true)
         local pitch = 1.25 - math.min(os.clock() - started, 1.4) * 0.2 -- ticks drop in pitch as the roll slows
         SoundController.PlaySFX("SpinTick", Vector2.new(pitch, pitch))
         task.wait(0.06 + (os.clock() - started) * 0.06)
     end
 
-    -- A beat of tension before the big ones land
+    -- A beat of tension (the lamp cuts out) before the big ones land
     local style = if result then Styles.Get(result) else nil
     if style and (style.rarity == "Epic" or style.rarity == "Legendary") then
+        cone.ImageTransparency = 0.95
+        lamp.ImageTransparency = 0.8
         UIKit.shake(showcase, 3)
         task.wait(0.25)
     end
@@ -326,348 +328,201 @@ local function spin()
     if style then
         reveal(style)
     else
-        setRaySpeed(30)
+        setLamp(false)
     end
 end
 
--- Flat tag: filled (rarity) or outlined (state)
-local function chip(parent: Instance, fill: Color3?, label: string, order: number): (Frame, TextLabel)
-    local frame: Frame = make("Frame", {
-        LayoutOrder = order,
-        Size = UDim2.fromOffset(0, 22),
-        AutomaticSize = Enum.AutomaticSize.X,
-        BackgroundColor3 = fill or C.Night,
-        BackgroundTransparency = if fill then 0 else 1,
-    }, parent)
-    UIKit.corner(frame, 2)
-    if not fill then
-        UIKit.stroke(frame, C.Chalk, 1, 0.35)
+-- Fit the mockup into the core-UI safe area (below the Roblox top bar)
+local function fitBoard(gui: ScreenGui, scale: UIScale)
+    local area = gui.AbsoluteSize
+    if area.X > 0 and area.Y > 0 then
+        scale.Scale = math.min(area.X / DESIGN.X, area.Y / DESIGN.Y)
     end
-    local labelText = text({
-        Text = label,
-        FontFace = F.Label,
-        TextSize = 13,
-        TextColor3 = if fill then C.Deep else C.Chalk,
-        Size = UDim2.fromScale(0, 1),
-        AutomaticSize = Enum.AutomaticSize.X,
-    }, frame)
-    make("UIPadding", { PaddingLeft = UDim.new(0, 9), PaddingRight = UDim.new(0, 9) }, labelText)
-    return frame, labelText
-end
-
-local function row(parent: Instance, order: number, height: number, padding: number): Frame
-    local frame: Frame = make("Frame", { LayoutOrder = order, Size = UDim2.new(1, 0, 0, height), BackgroundTransparency = 1 }, parent)
-    make("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, padding), SortOrder = Enum.SortOrder.LayoutOrder, VerticalAlignment = Enum.VerticalAlignment.Center }, frame)
-    return frame
-end
-
-local function fitBoard(scale: UIScale)
-    local camera = Workspace.CurrentCamera
-    if not camera then return end
-    local view = camera.ViewportSize
-    scale.Scale = math.min(view.X * 0.94 / DESIGN.X, view.Y * 0.86 / DESIGN.Y, 1.25)
 end
 
 local function buildHintButton()
     -- Own ScreenGui inside the core-UI safe area (the menu's backdrop is full-bleed)
     local gui: ScreenGui = make("ScreenGui", { Name = "StylesButton", ResetOnSpawn = false, ScreenInsets = Enum.ScreenInsets.CoreUISafeInsets }, nil)
+    hintGui = gui
     local slot: Frame = make("Frame", {
         Position = UDim2.fromOffset(18, 18), -- top-left; bottom-left is the touch thumbstick
-        Size = UDim2.fromOffset(176, 46),
+        Size = UDim2.fromOffset(176, 50),
         BackgroundTransparency = 1,
     }, gui)
     UIKit.fitScreen(slot) -- the button itself carries the hover/press scale
     hintButton = make("TextButton", {
         Name = "StylesButton",
         Size = UDim2.fromScale(1, 1),
-        BackgroundColor3 = C.Night,
-        BackgroundTransparency = 0.06,
+        BackgroundTransparency = 1,
         AutoButtonColor = false,
         Text = "",
     }, slot)
-    UIKit.wash(hintButton, 0.8)
-    UIKit.panel(hintButton, C.Signal, "Left")
-    text({
-        Text = "STYLES",
-        FontFace = F.Display,
-        TextSize = 21,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        Position = UDim2.fromOffset(18, 0),
-        Size = UDim2.new(1, -60, 1, 0),
-        ZIndex = 16,
+    art(A.Patch, { ImageColor3 = C.Patch, ImageTransparency = 0.12 }, hintButton)
+    text({ Text = "STYLES", FontFace = F.Display, TextSize = 24, TextXAlignment = Enum.TextXAlignment.Left, Position = UDim2.fromOffset(18, 0), Size = UDim2.new(1, -60, 1, 0), ZIndex = 2 }, hintButton)
+    hintCount = text({
+        Text = "0",
+        FontFace = F.Number,
+        TextSize = 22,
+        TextColor3 = C.Sodium,
+        TextXAlignment = Enum.TextXAlignment.Right,
+        AnchorPoint = Vector2.new(1, 0),
+        Position = UDim2.new(1, -16, 0, 0),
+        Size = UDim2.fromOffset(40, 50),
+        ZIndex = 2,
     }, hintButton)
-    local badge: Frame = make("Frame", {
-        AnchorPoint = Vector2.new(1, 0.5),
-        Position = UDim2.new(1, -9, 0.5, 0),
-        Size = UDim2.fromOffset(34, 28),
-        BackgroundColor3 = C.Deep,
-        ZIndex = 16,
-    }, hintButton)
-    UIKit.corner(badge, 3)
-    UIKit.stroke(badge, C.Steel, 1, 0)
-    hintCount = text({ Text = "0", FontFace = F.Display, TextSize = 16, Size = UDim2.fromScale(1, 1), ZIndex = 17 }, badge)
     UIKit.button(hintButton, function()
         setOpen(not panel.Visible)
     end)
     gui.Parent = player:WaitForChild("PlayerGui")
 end
 
+-- The avatar on the right, under the streetlamp. Image positions include the blur margins of the art.
 local function buildShowcase()
-    showcase = make("Frame", {
-        Name = "Showcase",
-        Position = UDim2.fromOffset(20, 24),
-        Size = UDim2.new(0.4, -26, 1, -44),
-        BackgroundTransparency = 1,
-    }, panel)
-    -- Clipped backdrop: dark rarity-tinted fill, faint rays, a low glow behind the avatar
-    showcaseFill = make("CanvasGroup", { Size = UDim2.fromScale(1, 1), BackgroundColor3 = C.Deep }, showcase)
-    UIKit.corner(showcaseFill, 4)
-    UIKit.wash(showcaseFill, 0.5)
-    rays = make("ImageLabel", {
-        AnchorPoint = Vector2.new(0.5, 0.5),
-        Position = UDim2.fromScale(0.5, 0.42),
-        Size = UDim2.fromScale(1.7, 1.7),
-        BackgroundTransparency = 1,
-        Image = UIKit.Image.Rays,
-        ImageTransparency = 0.84,
-    }, showcaseFill)
-    make("UIAspectRatioConstraint", {}, rays)
-    make("ImageLabel", {
-        AnchorPoint = Vector2.new(0.5, 0.5),
-        Position = UDim2.fromScale(0.5, 0.48),
-        Size = UDim2.fromScale(0.85, 0.85),
-        BackgroundTransparency = 1,
-        Image = UIKit.Image.Glow,
-        ImageColor3 = C.Chalk,
-        ImageTransparency = 0.88,
-    }, showcaseFill)
+    lamp = art(A.Lamp, { Position = UDim2.fromOffset(882, -52), Size = UDim2.fromOffset(206, 88), ImageColor3 = C.Sodium, ImageTransparency = 0.1 }, panel)
+    cone = art(A.Cone, { Position = UDim2.fromOffset(595, -40), Size = UDim2.fromOffset(780, 810), ImageColor3 = C.Sodium, ImageTransparency = CONE_REST }, panel)
+    art(A.Pool, { Position = UDim2.fromOffset(672, 648), Size = UDim2.fromOffset(626, 134), ImageColor3 = C.Sodium, ImageTransparency = 0.7 }, panel)
+    art(A.Shadow, { Position = UDim2.fromOffset(798, 680), Size = UDim2.fromOffset(368, 68), ImageColor3 = Color3.new(), ImageTransparency = 0.25 }, panel)
 
+    -- Wider than the mockup's 475 px avatar box so wide dance poses aren't cut off at the edges
+    showcase = make("Frame", { Name = "Showcase", Position = UDim2.fromOffset(635, 66), Size = UDim2.fromOffset(700, 650), BackgroundTransparency = 1, ZIndex = 2 }, panel)
     viewport = make("ViewportFrame", {
         Size = UDim2.fromScale(1, 1),
         BackgroundTransparency = 1,
-        Ambient = Color3.fromRGB(150, 155, 165),
-        LightColor = Color3.fromRGB(235, 238, 245),
-        LightDirection = Vector3.new(-0.5, -1, 0.6),
+        Ambient = Color3.fromRGB(78, 80, 92),
+        LightColor = Color3.fromRGB(255, 208, 150), -- sodium lamp overhead
+        LightDirection = Vector3.new(-0.25, -1, 0.35),
         ZIndex = 2,
     }, showcase)
     worldModel = make("WorldModel", {}, viewport)
-    local camera: Camera = make("Camera", {
-        FieldOfView = 30,
-        CFrame = CFrame.lookAt(Vector3.new(3.8, 1.2, -18.5), Vector3.new(0, 0.3, 0)), -- 3/4 view, whole body
-    }, viewport)
-    viewport.CurrentCamera = camera
-    make("Part", {
-        Shape = Enum.PartType.Cylinder,
-        Size = Vector3.new(0.4, 6, 6),
-        CFrame = CFrame.new(0, PODIUM_TOP - 0.2, 0) * CFrame.Angles(0, 0, math.rad(90)),
-        Anchored = true,
-        Material = Enum.Material.SmoothPlastic,
-        Color = Color3.fromRGB(34, 40, 52),
-    }, worldModel)
-
-    revealFlash = make("Frame", { Name = "RevealFlash", Size = UDim2.fromScale(1, 1), BorderSizePixel = 0, Visible = false, ZIndex = 10 }, showcase)
-    UIKit.corner(revealFlash, 4)
-    local edgeHolder: Frame = make("Frame", { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, ZIndex = 20 }, showcase)
-    UIKit.corner(edgeHolder, 4)
-    showcaseEdge = UIKit.stroke(edgeHolder, C.Steel, 1, 0)
-    setRaySpeed(30)
+    previewCamera = make("Camera", { FieldOfView = 30 }, viewport)
+    viewport.CurrentCamera = previewCamera
+    frameAvatar(5.5)
 end
 
 local function buildInfo()
-    local info: Frame = make("Frame", {
-        Name = "Info",
-        Position = UDim2.new(0.4, 6, 0, 24),
-        Size = UDim2.new(0.6, -26, 1, -44),
-        BackgroundTransparency = 1,
-    }, panel)
-    make("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 10) }, info)
+    local function label(props: { [string]: any }): TextLabel
+        props.TextXAlignment = props.TextXAlignment or Enum.TextXAlignment.Left
+        props.ZIndex = 3
+        return text(props, panel)
+    end
 
-    nameLabel = text({
-        LayoutOrder = 1,
-        FontFace = F.Display,
-        TextScaled = true,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        TextColor3 = C.White,
-        Size = UDim2.new(1, -40, 0, 54),
-    }, info)
-    make("UITextSizeConstraint", { MaxTextSize = 54 }, nameLabel)
+    local rarityLine: Frame = make("Frame", { Position = UDim2.fromOffset(76, 70), Size = UDim2.fromOffset(0, 30), AutomaticSize = Enum.AutomaticSize.X, BackgroundTransparency = 1, ZIndex = 3 }, panel)
+    make("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 12), SortOrder = Enum.SortOrder.LayoutOrder }, rarityLine)
+    rarityLabel = text({ LayoutOrder = 1, FontFace = F.Bold, TextSize = 20, Size = UDim2.fromScale(0, 1), AutomaticSize = Enum.AutomaticSize.X }, rarityLine)
+    equippedLabel = text({ LayoutOrder = 2, Text = "equipped", FontFace = F.Body, TextSize = 20, TextColor3 = C.Dim, Size = UDim2.fromScale(0, 1), AutomaticSize = Enum.AutomaticSize.X }, rarityLine)
+
+    -- The mockup's 112 px name is past Roblox's TextSize cap: the label sits at 100 in a holder scaled
+    -- up to match. The label hugs its text, so the chalk underline (a child) always fits the name.
+    local big = 112 * UIKit.EM / 100
+    local nameHolder: Frame = make("Frame", { Position = UDim2.fromOffset(72, 150 - 50 * big), Size = UDim2.fromOffset(564 / big, 100), BackgroundTransparency = 1, ZIndex = 3 }, panel)
+    make("UIScale", { Scale = big }, nameHolder)
+    nameLabel = text({ FontFace = F.Display, TextColor3 = C.White, TextXAlignment = Enum.TextXAlignment.Left, Size = UDim2.fromOffset(0, 100), AutomaticSize = Enum.AutomaticSize.X, ZIndex = 3 }, nameHolder)
+    nameLabel.TextSize = 100
     nameGradient = make("UIGradient", {}, nameLabel)
+    underlineClip = make("Frame", { Position = UDim2.fromScale(-0.015, 0.88), Size = UNDERLINE, BackgroundTransparency = 1, ClipsDescendants = true, ZIndex = 3 }, nameLabel)
+    art(A.Underline, { ImageColor3 = C.Chalk, ZIndex = 3 }, underlineClip)
 
-    local chips = row(info, 2, 22, 8)
-    rarityChip, rarityText = chip(chips, C.Dim, "", 1)
-    equippedChip = chip(chips, nil, "EQUIPPED", 2)
+    descLabel = label({ FontFace = F.Body, TextSize = 19, TextColor3 = C.Dim, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top, Position = UDim2.fromOffset(76, 240), Size = UDim2.fromOffset(520, 52) })
 
-    descLabel = text({
-        LayoutOrder = 3,
-        FontFace = F.Body,
-        TextSize = 16,
-        TextWrapped = true,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        TextYAlignment = Enum.TextYAlignment.Top,
-        TextTransparency = 0.12,
-        Size = UDim2.new(1, 0, 0, 40),
-    }, info)
-
-    local skills = row(info, 4, 56, 10)
     for i, slot in { "Q", "E" } :: { Types.SkillSlot } do
-        local card: Frame = make("Frame", { LayoutOrder = i, Size = UDim2.new(0.5, -5, 1, 0), BackgroundColor3 = C.Slab }, skills)
-        UIKit.wash(card, 0.8)
-        local accent = (UIKit.panel(card, C.Dim, "Left")) :: Frame
-        local icon: ImageLabel = make("ImageLabel", {
-            AnchorPoint = Vector2.new(0, 0.5),
-            Position = UDim2.new(0, 14, 0.5, 0),
-            Size = UDim2.fromOffset(34, 34),
-            BackgroundTransparency = 1,
-        }, card)
-        local key: Frame = make("Frame", { AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -8, 0, 8), Size = UDim2.fromOffset(18, 18), BackgroundColor3 = C.Deep, ZIndex = 3 }, card)
-        UIKit.corner(key, 2)
-        UIKit.stroke(key, C.Steel, 1, 0)
-        text({ Text = slot, FontFace = F.Display, TextSize = 12, Size = UDim2.fromScale(1, 1), ZIndex = 4 }, key)
-        local name = text({
-            FontFace = F.Bold,
-            TextSize = 16,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            TextTruncate = Enum.TextTruncate.AtEnd,
-            Position = UDim2.fromOffset(58, 8),
-            Size = UDim2.new(1, -92, 0, 22),
-        }, card)
-        local cooldown = text({
-            FontFace = F.Body,
-            TextSize = 13,
-            TextColor3 = C.Dim,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            Position = UDim2.fromOffset(58, 29),
-            Size = UDim2.new(1, -66, 0, 18),
-        }, card)
-        skillCards[slot] = { icon = icon, accent = accent, name = name, cooldown = cooldown }
+        local y = 305 + (i - 1) * 64
+        art(A.KeyBox, { Position = UDim2.fromOffset(70, y), Size = UDim2.fromOffset(55, 55), ImageColor3 = C.Chalk, ZIndex = 3 }, panel)
+        label({ Text = slot, FontFace = F.Number, TextSize = 22, TextColor3 = C.Sodium, TextXAlignment = Enum.TextXAlignment.Center, Position = UDim2.fromOffset(70, y), Size = UDim2.fromOffset(55, 55) })
+        skillRows[slot] = {
+            icon = art("", { Position = UDim2.fromOffset(136, y + 10), Size = UDim2.fromOffset(36, 36), ImageColor3 = C.Chalk, ZIndex = 3 }, panel),
+            name = label({ FontFace = F.Bold, TextSize = 22, Position = UDim2.fromOffset(188, y + 3), Size = UDim2.fromOffset(400, 30) }),
+            cooldown = label({ FontFace = F.Body, TextSize = 15, TextColor3 = C.Dim, Position = UDim2.fromOffset(188, y + 29), Size = UDim2.fromOffset(400, 22) }),
+        }
     end
 
-    -- Passives as readouts: small label over the value
-    local stats = row(info, 5, 34, 28)
-    for i, label in { "SPEED", "STAMINA", "REACH" } do
-        local stat: Frame = make("Frame", { LayoutOrder = i, Size = UDim2.fromOffset(70, 34), BackgroundTransparency = 1 }, stats)
-        text({ Text = label, FontFace = F.Label, TextSize = 12, TextColor3 = C.Dim, TextXAlignment = Enum.TextXAlignment.Left, Size = UDim2.new(1, 0, 0, 14) }, stat)
-        statValues[i] = text({ FontFace = F.Display, TextSize = 19, TextXAlignment = Enum.TextXAlignment.Left, Position = UDim2.fromOffset(0, 13), Size = UDim2.new(1, 0, 0, 21) }, stat)
+    -- Passives: big number over a small label
+    for i, name in { "Speed", "Stamina", "Reach" } do
+        local x = 76 + (i - 1) * 150
+        statValues[i] = label({ FontFace = F.Number, TextSize = 34, Position = UDim2.fromOffset(x, 446), Size = UDim2.fromOffset(140, 44) })
+        label({ Text = name, FontFace = F.Body, TextSize = 16, TextColor3 = C.Dim, Position = UDim2.fromOffset(x, 488), Size = UDim2.fromOffset(140, 22) })
     end
 
-    -- Roll odds per tier: a bar for the chance, then every style in that tier
-    local odds: Frame = make("Frame", { LayoutOrder = 6, Size = UDim2.new(1, 0, 0, 96), BackgroundTransparency = 1 }, info)
-    make("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 4) }, odds)
+    art(A.Divider, { Position = UDim2.fromOffset(70, 520), Size = UDim2.fromOffset(482, 14), ImageColor3 = C.Chalk, ImageTransparency = 0.65, ZIndex = 3 }, panel)
+
+    -- Roll odds per tier, two columns: chance in the rarity color, then every style in that tier
     local weights = Config.Styles.RarityWeights :: { [string]: number }
     local total = 0
     for _, rarity in Styles.RarityOrder do
         total += weights[rarity] or 0
     end
     for i, rarity in Styles.RarityOrder do
-        local color = Styles.RarityColors[rarity]
-        local share = (weights[rarity] or 0) / total
+        local x, y = 76 + (i - 1) % 2 * 250, 546 + (i - 1) // 2 * 44
         local names = {}
         for _, style in Styles.List do
             if style.rarity == rarity then
                 table.insert(names, style.name)
             end
         end
-        local line: Frame = make("Frame", { LayoutOrder = i, Size = UDim2.new(1, 0, 0, 20), BackgroundTransparency = 1 }, odds)
-        text({ Text = string.upper(rarity), FontFace = F.Label, TextSize = 13, TextColor3 = color, TextXAlignment = Enum.TextXAlignment.Left, Size = UDim2.fromOffset(86, 20) }, line)
-        local track: Frame = make("Frame", { AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0, 88, 0.5, 0), Size = UDim2.fromOffset(110, 6), BackgroundColor3 = C.Deep }, line)
-        UIKit.corner(track, 1)
-        local fill: Frame = make("Frame", { Size = UDim2.fromScale(share, 1), BackgroundColor3 = color, BorderSizePixel = 0 }, track)
-        UIKit.corner(fill, 1)
-        table.insert(oddsFills, { fill = fill, share = share })
-        text({ Text = `{math.round(share * 100)}%`, FontFace = F.Display, TextSize = 15, TextXAlignment = Enum.TextXAlignment.Right, Position = UDim2.fromOffset(200, 0), Size = UDim2.fromOffset(42, 20) }, line)
-        text({
-            Text = table.concat(names, ", "),
-            FontFace = F.Body,
-            TextSize = 13,
-            TextColor3 = C.Dim,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            TextTruncate = Enum.TextTruncate.AtEnd,
-            Position = UDim2.fromOffset(254, 0),
-            Size = UDim2.new(1, -254, 0, 20),
-        }, line)
+        label({ Text = `{math.round((weights[rarity] or 0) / total * 100)}%`, FontFace = F.Number, TextSize = 18, TextColor3 = Styles.RarityColors[rarity], Position = UDim2.fromOffset(x, y), Size = UDim2.fromOffset(50, 24) })
+        label({ Text = rarity, FontFace = F.Semi, TextSize = 16, Position = UDim2.fromOffset(x + 52, y - 1), Size = UDim2.fromOffset(190, 22) })
+        label({ Text = table.concat(names, ", "), FontFace = F.Body, TextSize = 13, TextColor3 = C.Dim, TextTruncate = Enum.TextTruncate.AtEnd, Position = UDim2.fromOffset(x + 52, y + 19), Size = UDim2.fromOffset(190, 18) })
     end
 
     spinButton = make("TextButton", {
         Name = "SpinButton",
-        LayoutOrder = 7,
-        Size = UDim2.new(1, 0, 0, 56),
-        BackgroundColor3 = C.Signal,
+        Position = UDim2.fromOffset(67, 641),
+        Size = UDim2.fromOffset(358, 86),
+        BackgroundTransparency = 1,
         AutoButtonColor = false,
         Text = "",
         Modal = true,
-    }, info)
-    UIKit.wash(spinButton, 0.72)
-    UIKit.panel(spinButton)
-    spinSheen = UIKit.shimmer(spinButton, 3)
-    local content: Frame = make("Frame", {
-        AnchorPoint = Vector2.new(0.5, 0.5),
-        Position = UDim2.fromScale(0.5, 0.5),
-        Size = UDim2.fromOffset(0, 36),
-        AutomaticSize = Enum.AutomaticSize.X,
-        BackgroundTransparency = 1,
-        ZIndex = 16,
-    }, spinButton)
-    make("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, VerticalAlignment = Enum.VerticalAlignment.Center, Padding = UDim.new(0, 12), SortOrder = Enum.SortOrder.LayoutOrder }, content)
-    spinText = text({ LayoutOrder = 1, FontFace = F.Display, TextSize = 28, Size = UDim2.fromScale(0, 1), AutomaticSize = Enum.AutomaticSize.X, ZIndex = 16 }, content)
-    spinCount = make("Frame", { LayoutOrder = 2, Size = UDim2.fromOffset(36, 28), BackgroundColor3 = C.Deep, BackgroundTransparency = 0.25, ZIndex = 16 }, content)
-    UIKit.corner(spinCount, 3)
-    spinCountText = text({ FontFace = F.Display, TextSize = 17, Size = UDim2.fromScale(1, 1), ZIndex = 17 }, spinCount)
+        ZIndex = 3,
+    }, panel)
+    spinPaint = art(A.Paint, { ImageColor3 = C.Sodium, ZIndex = 3 }, spinButton)
+    spinText = text({ FontFace = F.Display, TextSize = 40, TextColor3 = C.Ink, TextXAlignment = Enum.TextXAlignment.Left, Position = UDim2.fromOffset(39, 15), Size = UDim2.fromOffset(200, 56), ZIndex = 4 }, spinButton)
+    spinCount = text({ FontFace = F.Bold, TextSize = 17, TextColor3 = C.Ink, TextXAlignment = Enum.TextXAlignment.Right, AnchorPoint = Vector2.new(1, 0), Position = UDim2.fromOffset(319, 30), Size = UDim2.fromOffset(100, 26), ZIndex = 4 }, spinButton)
     UIKit.button(spinButton, spin)
 end
 
 local function buildUI()
     buildHintButton()
-    local gui: ScreenGui = make("ScreenGui", { Name = "SpinMenu", ResetOnSpawn = false, ZIndexBehavior = Enum.ZIndexBehavior.Sibling, ScreenInsets = Enum.ScreenInsets.None, DisplayOrder = 5 }, nil)
+    -- Full-bleed night + reveal flash behind the menu; the menu itself stays clear of the core UI
+    local back: ScreenGui = make("ScreenGui", { Name = "SpinBackdrop", ResetOnSpawn = false, IgnoreGuiInset = true, ScreenInsets = Enum.ScreenInsets.None, DisplayOrder = 4 }, nil)
+    backdrop = make("Frame", { Name = "Backdrop", Size = UDim2.fromScale(1, 1), BackgroundColor3 = C.Ink, BackgroundTransparency = 1, BorderSizePixel = 0, Visible = false }, back)
+    flash = make("Frame", { Name = "Flash", Size = UDim2.fromScale(1, 1), BorderSizePixel = 0, Visible = false }, back)
+    back.Parent = player:WaitForChild("PlayerGui")
 
-    backdrop = make("Frame", { Name = "Backdrop", Size = UDim2.fromScale(1, 1), BackgroundColor3 = C.Deep, BackgroundTransparency = 1, Visible = false }, gui)
+    local gui: ScreenGui = make("ScreenGui", { Name = "SpinMenu", ResetOnSpawn = false, ZIndexBehavior = Enum.ZIndexBehavior.Sibling, ScreenInsets = Enum.ScreenInsets.CoreUISafeInsets, DisplayOrder = 5 }, nil)
     holder = make("Frame", {
-        AnchorPoint = Vector2.new(0.5, 0.5),
-        Position = UDim2.fromScale(0.5, 0.5),
+        AnchorPoint = Vector2.new(0.5, 0),
+        Position = UDim2.fromScale(0.5, 0),
         Size = UDim2.fromOffset(DESIGN.X, DESIGN.Y),
         BackgroundTransparency = 1,
     }, gui)
     local boardScale: UIScale = make("UIScale", { Name = "Fit" }, holder)
-    fitBoard(boardScale)
-    local camera = Workspace.CurrentCamera
-    if camera then
-        camera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
-            fitBoard(boardScale)
-        end)
-    end
+    gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+        fitBoard(gui, boardScale)
+    end)
 
-    panel = make("Frame", {
-        Name = "Panel",
-        AnchorPoint = Vector2.new(0.5, 0.5),
-        Position = UDim2.fromScale(0.5, 0.5),
-        Size = UDim2.fromScale(1, 1),
-        BackgroundColor3 = C.Night,
-        BackgroundTransparency = 0.02,
-        Visible = false,
-    }, holder)
+    panel = make("Frame", { Name = "Panel", Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Visible = false }, holder)
     openScale = make("UIScale", { Name = "Open" }, panel)
-    UIKit.wash(panel, 0.8)
-    boardAccent = (UIKit.panel(panel, C.Dim, "Top", 6)) :: Frame
 
     buildShowcase()
     buildInfo()
 
     local close: TextButton = make("TextButton", {
         Name = "Close",
-        AnchorPoint = Vector2.new(1, 0),
-        Position = UDim2.new(1, -14, 0, 14),
-        Size = UDim2.fromOffset(32, 32),
-        BackgroundColor3 = C.Slab,
+        Position = UDim2.fromOffset(1290, 18),
+        Size = UDim2.fromOffset(44, 56),
+        BackgroundTransparency = 1,
         AutoButtonColor = false,
-        Text = "",
-        ZIndex = 22,
+        FontFace = F.Body,
+        Text = "×",
+        TextSize = math.round(38 * UIKit.EM),
+        TextColor3 = C.Dim,
+        ZIndex = 4,
     }, panel)
-    UIKit.panel(close)
-    text({ Text = "X", FontFace = F.Display, TextSize = 16, TextColor3 = C.Dim, Size = UDim2.fromScale(1, 1), ZIndex = 23 }, close)
     UIKit.button(close, function()
         setOpen(false)
     end)
 
     gui.Parent = player:WaitForChild("PlayerGui")
+    fitBoard(gui, boardScale)
 end
 
 function SpinController.Init()

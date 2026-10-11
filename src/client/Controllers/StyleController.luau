@@ -27,10 +27,10 @@ local StyleController = {}
 local player = Players.LocalPlayer
 local lastCast: { [string]: number } = {}
 
-type SlotUI = { root: Frame, icon: ImageLabel, edge: UIStroke, shade: Frame, timer: TextLabel, name: TextLabel, glow: ImageLabel, ready: boolean }
+type SlotUI = { root: Frame, icon: ImageLabel, edge: ImageLabel, timer: TextLabel, glow: ImageLabel, ready: boolean }
 local slotUI: { [string]: SlotUI } = {}
 local styleName: TextLabel
-local styleRarity: TextLabel
+local rarityColor = UIKit.Color.Chalk
 
 local SLOTS: { Types.SkillSlot } = { "Q", "E" }
 
@@ -153,107 +153,59 @@ local function onSkillCast(casterUserId: any, styleId: any, slot: any, position:
 end
 
 local function buildUI()
-    local C, F, make, text = UIKit.Color, UIKit.Font, UIKit.make, UIKit.text
+    local C, F, A, make, text, art = UIKit.Color, UIKit.Font, UIKit.Art, UIKit.make, UIKit.text, UIKit.art
     local gui: ScreenGui = make("ScreenGui", { Name = "SkillBar", ResetOnSpawn = false, ScreenInsets = Enum.ScreenInsets.CoreUISafeInsets }, nil)
 
     local bar: Frame = make("Frame", {
         Name = "Bar",
         AnchorPoint = Vector2.new(0.5, 1),
-        Position = UDim2.new(0.5, 0, 1, -48),
-        Size = UDim2.fromOffset(200, 118),
+        Position = UDim2.new(0.5, 0, 1, -56),
+        Size = UDim2.fromOffset(152, 94),
         BackgroundTransparency = 1,
     }, gui)
     UIKit.fitScreen(bar)
 
-    -- Style name on the scoreboard face, rarity beside it in its color
-    local title: Frame = make("Frame", {
-        AnchorPoint = Vector2.new(0.5, 0),
-        Position = UDim2.fromScale(0.5, 0),
-        Size = UDim2.fromOffset(0, 24),
-        AutomaticSize = Enum.AutomaticSize.X,
-        BackgroundTransparency = 1,
-    }, bar)
-    make("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, VerticalAlignment = Enum.VerticalAlignment.Center, Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder }, title)
-    styleName = text({ FontFace = F.Display, TextSize = 20, Size = UDim2.fromScale(0, 1), AutomaticSize = Enum.AutomaticSize.X, LayoutOrder = 1 }, title)
-    UIKit.stroke(styleName, C.Deep, 1.5, 0.3)
-    styleRarity = text({ FontFace = F.Label, TextSize = 13, Size = UDim2.fromScale(0, 1), AutomaticSize = Enum.AutomaticSize.X, LayoutOrder = 2 }, title)
-    UIKit.stroke(styleRarity, C.Deep, 1.5, 0.3)
-
-    local row: Frame = make("Frame", { Position = UDim2.fromOffset(0, 30), Size = UDim2.new(1, 0, 0, 88), BackgroundTransparency = 1 }, bar)
-    make("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, HorizontalAlignment = Enum.HorizontalAlignment.Center, Padding = UDim.new(0, 16), SortOrder = Enum.SortOrder.LayoutOrder }, row)
+    -- Style name in its rarity color over two chalked slots
+    styleName = text({ FontFace = F.Number, TextSize = 15, Size = UDim2.new(1, 60, 0, 20), Position = UDim2.fromOffset(-30, 0) }, bar)
+    UIKit.stroke(styleName, C.Ink, 1, 0.4) -- rarity colors can match the ground (Legendary on a yellow pad)
+    local row: Frame = make("Frame", { Position = UDim2.fromOffset(0, 26), Size = UDim2.new(1, 0, 0, 68), BackgroundTransparency = 1 }, bar)
+    make("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 16), SortOrder = Enum.SortOrder.LayoutOrder }, row)
 
     for i, slot in SLOTS do
-        local root: Frame = make("Frame", { Name = `Slot{slot}`, LayoutOrder = i, Size = UDim2.fromOffset(72, 88), BackgroundTransparency = 1 }, row)
-        -- Glow that flashes behind the card when the skill is ready again
-        local glow: ImageLabel = make("ImageLabel", {
-            AnchorPoint = Vector2.new(0.5, 0.5),
-            Position = UDim2.fromOffset(36, 36),
-            Size = UDim2.fromOffset(120, 120),
-            BackgroundTransparency = 1,
-            Image = UIKit.Image.Glow,
-            ImageTransparency = 1,
-        }, root)
-        -- CanvasGroup clips the cooldown shade to the card's corners
-        local card: CanvasGroup = make("CanvasGroup", { Size = UDim2.fromOffset(72, 72), BackgroundColor3 = C.Slab, BackgroundTransparency = 0.05 }, root)
-        UIKit.wash(card, 0.75)
-        UIKit.corner(card, 4)
-        -- The edge lives on a holder outside the CanvasGroup so the group can't clip it
-        local edgeHolder: Frame = make("Frame", { Size = UDim2.fromOffset(72, 72), BackgroundTransparency = 1, ZIndex = 5 }, root)
-        UIKit.corner(edgeHolder, 4)
-        local edge = UIKit.stroke(edgeHolder, C.Steel, 1, 0.05)
-        local icon: ImageLabel = make("ImageLabel", {
-            AnchorPoint = Vector2.new(0.5, 0.5),
-            Position = UDim2.fromScale(0.5, 0.52),
-            Size = UDim2.fromOffset(42, 42),
-            BackgroundTransparency = 1,
-        }, card)
-        local shade: Frame = make("Frame", { Size = UDim2.fromScale(1, 0), BackgroundColor3 = C.Deep, BackgroundTransparency = 0.2, BorderSizePixel = 0, ZIndex = 2 }, card)
-        local timer = text({ FontFace = F.Display, TextSize = 28, Size = UDim2.fromScale(1, 1), ZIndex = 3 }, card)
-        local key: Frame = make("Frame", { Position = UDim2.fromOffset(4, 4), Size = UDim2.fromOffset(18, 18), BackgroundColor3 = C.Deep, ZIndex = 4 }, card)
-        UIKit.corner(key, 2)
-        UIKit.stroke(key, C.Steel, 1, 0)
-        text({ Text = slot, FontFace = F.Display, TextSize = 13, Size = UDim2.fromScale(1, 1), ZIndex = 5 }, key)
-        local name = text({
-            AnchorPoint = Vector2.new(0.5, 1),
-            Position = UDim2.new(0.5, 0, 1, 0),
-            Size = UDim2.fromOffset(110, 14),
-            FontFace = F.Bold,
-            TextSize = 13,
-            TextTruncate = Enum.TextTruncate.AtEnd,
-        }, root)
-        UIKit.stroke(name, C.Deep, 1.5, 0.3)
-        slotUI[slot] = { root = root, icon = icon, edge = edge, shade = shade, timer = timer, name = name, glow = glow, ready = true }
+        local root: Frame = make("Frame", { Name = `Slot{slot}`, LayoutOrder = i, Size = UDim2.fromOffset(68, 68), BackgroundTransparency = 1 }, row)
+        -- Glow that flashes behind the slot when the skill is ready again
+        local glow = art(UIKit.Image.Glow, { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(120, 120), ImageTransparency = 1 }, root)
+        art(A.SlotPatch, { Position = UDim2.fromOffset(-2, -2), Size = UDim2.fromOffset(72, 72), ImageColor3 = C.Patch, ImageTransparency = 0.22 }, root)
+        local edge = art(A.SlotEdge, { Position = UDim2.fromOffset(-3.5, -3.5), Size = UDim2.fromOffset(75, 75), ImageColor3 = C.Chalk, ZIndex = 2 }, root)
+        local icon = art("", { Position = UDim2.fromOffset(15, 15), Size = UDim2.fromOffset(38, 38), ImageColor3 = C.Chalk, ZIndex = 2 }, root)
+        local timer = text({ FontFace = F.Display, TextSize = 28, Size = UDim2.fromScale(1, 1), ZIndex = 3 }, root)
+        text({ Text = slot, FontFace = F.Number, TextSize = 14, TextColor3 = C.Sodium, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, Position = UDim2.fromOffset(9, 4), Size = UDim2.fromOffset(16, 18), ZIndex = 3 }, root)
+        slotUI[slot] = { root = root, icon = icon, edge = edge, timer = timer, glow = glow, ready = true }
     end
     gui.Parent = player:WaitForChild("PlayerGui")
 end
 
 local function refresh()
     local style = currentStyle()
-    local color = Styles.RarityColors[style.rarity]
+    rarityColor = Styles.RarityColors[style.rarity]
     table.clear(lastCast)
     styleName.Text = string.upper(style.name)
-    styleRarity.Text = string.upper(style.rarity)
-    styleRarity.TextColor3 = color
+    styleName.TextColor3 = rarityColor
     for _, slot in SLOTS do
         local skill = skillFor(style, slot)
         local ui = slotUI[slot]
-        ui.name.Text = skill.name
         ui.icon.Image = UIKit.Icon[skill.kind] or ""
-        ui.icon.ImageColor3 = color:Lerp(UIKit.Color.Chalk, 0.4)
-        ui.edge.Color = color:Lerp(UIKit.Color.Steel, 0.55)
         UIKit.pop(ui.root, 1.06)
         ContextActionService:SetTitle(`Skill{slot}`, skill.name) -- touch button label
     end
 end
 
--- Skill came back: snap the card, flash its edge in the rarity color and a faint glow behind it
+-- Skill came back: snap the slot, flash its chalk edge in the rarity color and a faint glow behind it
 local function ping(ui: SlotUI)
-    local rest = ui.edge.Color
     UIKit.pop(ui.root, 1.08)
-    ui.edge.Color = ui.icon.ImageColor3
-    ui.edge.Thickness = 2
-    TweenService:Create(ui.edge, TweenInfo.new(0.45, Enum.EasingStyle.Quad), { Color = rest, Thickness = 1 }):Play()
-    ui.glow.ImageColor3 = ui.icon.ImageColor3
+    ui.edge.ImageColor3 = rarityColor
+    TweenService:Create(ui.edge, TweenInfo.new(0.45, Enum.EasingStyle.Quad), { ImageColor3 = UIKit.Color.Chalk }):Play()
+    ui.glow.ImageColor3 = rarityColor
     ui.glow.ImageTransparency = 0.55
     ui.glow.Size = UDim2.fromOffset(80, 80)
     TweenService:Create(ui.glow, TweenInfo.new(0.45, Enum.EasingStyle.Quad), { ImageTransparency = 1, Size = UDim2.fromOffset(130, 130) }):Play()
@@ -291,9 +243,8 @@ function StyleController.Init()
             local cooldown = skillFor(style, slot).cooldown
             local remaining = math.max(cooldown - (now - (lastCast[slot] or -math.huge)), 0)
             local ui = slotUI[slot]
-            ui.shade.Size = UDim2.fromScale(1, remaining / cooldown)
             ui.timer.Text = if remaining > 0 then tostring(math.ceil(remaining)) else ""
-            ui.icon.ImageTransparency = if remaining > 0 then 0.55 else 0
+            ui.icon.ImageTransparency = if remaining > 0 then 0.7 else 0
             local ready = remaining <= 0
             if ready and not ui.ready then
                 ping(ui)
