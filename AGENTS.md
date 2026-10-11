@@ -178,3 +178,33 @@ only new systems. If several rows match, load all of them. If none match, say so
 - `BuildStreet`, `BuildHouseRow`, `BuildJeepney`, `BuildBarangayArch`, `BuildSariSariStore`,
   `BuildUtilityPolesAndWires`, `BuildBanderitas` (share one pole layout), hoop, walls, lighting.
   Both maps are saved in the place; the builders only run when a map is missing (or by hand in edit mode).
+- `SetupGoldenHourLighting` (runs on every server start): sunset `ClockTime`, warm atmosphere, bloom,
+  a warm `ColorCorrectionEffect` grade, sun rays, and `EnvironmentDiffuseScale = 0.45` so shade stays
+  warm instead of sky-blue. Asphalt is a warm grey-brown (104, 96, 90).
+- `OptimizeDecor(root)` runs on every built map (and was run on the saved ones): all map parts get
+  `CanTouch = false`, non-solid decor gets `CanQuery = false` (flags/wires never block tag line of sight
+  or Blink raycasts), parts under 1.5 studs get `CastShadow = false`. Run it after adding map pieces by hand.
+- Hub queue pads glow (a `PointLight` in the pad color) and emit rising sparkles (`HubService.decoratePad`).
+
+### Presentation (client) — audio, VFX, HUD
+- **Audio** (`SoundController`, classic `Sound` + SoundGroups Master → SFX / UI / Ambience / Music; all ids
+  in `SOUND_CONFIGS`): hub-only acoustic music (`HubMusic`) under the street ambience; whistles for the
+  countdown, round start and round end; clock ticks each second in a round's last 10 s; crowd cheer on
+  Tubig and at match over; a heartbeat that fades in and quickens below ~35% stamina; UI clicks.
+  3D one-shots play from an `Attachment` on Terrain.
+- **Skills** (`StyleController`): each skill kind has its own cast sound (`SKILL_SFX`). Dash/Haste leave a
+  rarity-colored trail on the caster; Slow sweeps an ice ring over its radius (white for a freeze).
+  Characters with `SlowMult` get an icy `Highlight` for everyone else; your own screen gets an icy tint.
+- **Spins** (`SpinController`): ticks that drop in pitch as the roll slows; the reveal plays a chime
+  (Common/Rare), fanfare (Epic) or boom + fanfare (Legendary), flashes the menu in the rarity color and
+  thickens the panel outline (the outline is always tinted by the shown style's rarity).
+- **Guard tag swipe** (`TagController`): a tag attempt plays the `Animate` script's `toolslash` animation on
+  your own character (replicates, so everyone sees the swing); in first person your right arm is shown
+  only while the swipe plays.
+- **Tags** (`CourtVFXController`): the tagged Passer flashes red for everyone else; the tagger sees a red
+  hit-marker ring pop around the crosshair (`HUDController`).
+- **HUD** (`HUDController`): each block scales with screen height (`ViewportSize.Y / 900`, clamped
+  0.6–1.3) inside the core-UI safe area; scores are colored by team; the round clock turns red and pulses
+  in the last 10 s; the stamina bar fades smoothly green → yellow → red; a newer banner cancels an older
+  banner's fade, so back-to-back events never hide each other.
+- `CourtGeometry` builds the line and zone definitions once (frozen tables) instead of on every call.

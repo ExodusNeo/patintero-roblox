@@ -24,6 +24,7 @@ function FilipinoStreetEnvironment.SetupGoldenHourLighting()
     Lighting.ColorShift_Top = Color3.fromRGB(255, 210, 150)
     Lighting.ColorShift_Bottom = Color3.fromRGB(180, 140, 100)
     Lighting.ShadowSoftness = 0.2
+    Lighting.EnvironmentDiffuseScale = 0.45 -- less blue sky fill, so shade stays warm instead of navy
     Lighting.GlobalShadows = true
 
     -- Soft warm atmosphere
@@ -48,6 +49,34 @@ function FilipinoStreetEnvironment.SetupGoldenHourLighting()
     bloom.Intensity = 0.6
     bloom.Size = 24
     bloom.Threshold = 1.2
+
+    -- Warm, slightly punchy grade so the painted houses and banderitas pop against the sunset
+    local grade = Lighting:FindFirstChildOfClass("ColorCorrectionEffect") or Instance.new("ColorCorrectionEffect")
+    grade.Contrast = 0.08
+    grade.Saturation = 0.12
+    grade.TintColor = Color3.fromRGB(255, 244, 230)
+    grade.Parent = Lighting
+
+    local sunRays = Lighting:FindFirstChildOfClass("SunRaysEffect") or Instance.new("SunRaysEffect")
+    sunRays.Intensity = 0.06
+    sunRays.Spread = 0.55
+    sunRays.Parent = Lighting
+end
+
+-- Decoration never needs touch events; non-solid decor also skips raycasts (so flags and wires never block
+-- a tag's line of sight) and tiny parts skip shadows. Run on a finished map.
+function FilipinoStreetEnvironment.OptimizeDecor(root: Instance)
+    for _, part in root:GetDescendants() do
+        if part:IsA("BasePart") and not part:IsA("SpawnLocation") then
+            part.CanTouch = false
+            if not part.CanCollide then
+                part.CanQuery = false
+            end
+            if math.max(part.Size.X, part.Size.Y, part.Size.Z) < 1.5 then
+                part.CastShadow = false
+            end
+        end
+    end
 end
 
 local function createPart(name: string, size: Vector3, cf: CFrame, material: Enum.Material, color: Color3, parent: Instance, canCollide: boolean?): Part
@@ -395,7 +424,7 @@ end
 -- Asphalt street with raised sidewalks and painted curbs, centered on the origin along Z.
 function FilipinoStreetEnvironment.BuildStreet(parent: Instance, width: number, length: number, centerY: number)
     createPart("StreetAsphalt", Vector3.new(width + 4, 2, length), CFrame.new(0, centerY - 1, 0),
-        Enum.Material.Asphalt, Color3.fromRGB(50, 50, 54), parent)
+        Enum.Material.Asphalt, Color3.fromRGB(104, 96, 90), parent)
 
     local sidewalkWidth, sidewalkHeight = 8, 0.8
     for _, side in { -1, 1 } do

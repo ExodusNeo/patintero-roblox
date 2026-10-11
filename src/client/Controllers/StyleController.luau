@@ -31,6 +31,25 @@ local styleLabel: TextLabel
 
 local SLOTS: { Types.SkillSlot } = { "Q", "E" }
 
+-- Cast sound per skill kind (names from SoundController), with a pitch range for variety
+local SKILL_SFX: { [Types.SkillKind]: { sound: string, pitch: Vector2 } } = {
+    Dash = { sound = "DashWhoosh", pitch = Vector2.new(0.95, 1.1) },
+    Blink = { sound = "BlinkZap", pitch = Vector2.new(1, 1.15) },
+    Haste = { sound = "DashWhoosh", pitch = Vector2.new(1.25, 1.4) },
+    SecondWind = { sound = "CheckpointChime", pitch = Vector2.new(1.2, 1.3) },
+    LongArm = { sound = "SlideWhoosh", pitch = Vector2.new(0.7, 0.8) },
+    Slow = { sound = "FreezeIce", pitch = Vector2.new(0.95, 1.05) },
+    Veil = { sound = "BlinkZap", pitch = Vector2.new(0.55, 0.65) },
+}
+local ICE_COLOR = Color3.fromRGB(150, 215, 255)
+
+-- Your own screen gets an icy tint while you're slowed (others see a highlight on you instead)
+local slowedTint = Instance.new("ColorCorrectionEffect")
+slowedTint.Name = "SlowedTint"
+slowedTint.TintColor = Color3.fromRGB(200, 230, 255)
+slowedTint.Saturation = -0.35
+slowedTint.Enabled = false
+
 local function currentStyle(): Types.StyleDef
     return Styles.Get(player:GetAttribute("Style") :: string?)
 end
@@ -81,6 +100,89 @@ local function pulse(position: Vector3, radius: number, color: Color3)
     Debris:AddItem(sphere, 0.5)
 end
 
+-- Flat ring that sweeps out along the ground to the skill's radius (Slow / freeze area).
+local function shockwave(position: Vector3, radius: number, color: Color3)
+    local ring = Instance.new("Part")
+    ring.Shape = Enum.PartType.Cylinder
+    ring.Anchored = true
+    ring.CanCollide = false
+    ring.CanQuery = false
+    ring.CanTouch = false
+    ring.CastShadow = false
+    ring.Material = Enum.Material.Neon
+    ring.Color = color
+    ring.Transparency = 0.25
+    ring.Size = Vector3.new(0.2, 2, 2)
+    ring.CFrame = CFrame.new(position - Vector3.new(0, 2.9, 0)) * CFrame.Angles(0, 0, math.rad(90)) -- root height above the feet
+    ring.Parent = Workspace
+
+    TweenService:Create(ring, TweenInfo.new(0.5, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+        Size = Vector3.new(0.2, radius * 2, radius * 2),
+        Transparency = 1,
+    }):Play()
+    Debris:AddItem(ring, 0.55)
+end
+
+-- Speed streak behind the caster while a Dash / Haste lasts.
+local function streak(character: Model, color: Color3, duration: number)
+    local root = character:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+    local top = Instance.new("Attachment")
+    top.Position = Vector3.new(0, 0.9, 0)
+    local bottom = Instance.new("Attachment")
+    bottom.Position = Vector3.new(0, -0.9, 0)
+    local trail = Instance.new("Trail")
+    trail.Attachment0 = top
+    trail.Attachment1 = bottom
+    trail.Color = ColorSequence.new(color, Color3.new(1, 1, 1))
+    trail.Transparency = NumberSequence.new(0.35, 1)
+    trail.Lifetime = 0.3
+    trail.LightEmission = 0.7
+    trail.FaceCamera = true
+    top.Parent = root
+    bottom.Parent = root
+    trail.Parent = root
+    for _, item in { trail, top, bottom } do
+        Debris:AddItem(item, duration + trail.Lifetime)
+    end
+end
+
+-- Slowed / frozen characters (SlowMult set by the server) glow icy for everyone else.
+local function updateSlowFX(character: Model, isLocal: boolean)
+    local mult = character:GetAttribute("SlowMult") :: number?
+    if isLocal then
+        slowedTint.Enabled = mult ~= nil
+        return
+    end
+    local existing = character:FindFirstChild("SlowedFX") :: Highlight?
+    if mult == nil then
+        if existing then
+            existing:Destroy()
+        end
+        return
+    end
+    local highlight = existing or Instance.new("Highlight")
+    highlight.Name = "SlowedFX"
+    highlight.FillColor = ICE_COLOR
+    highlight.OutlineColor = Color3.new(1, 1, 1)
+    highlight.OutlineTransparency = 0.3
+    highlight.FillTransparency = if mult <= 0 then 0.25 else 0.6 -- frozen looks solid ice
+    highlight.Parent = character
+end
+
+local function watchSlows(other: Player)
+    local function onCharacter(character: Model)
+        character:GetAttributeChangedSignal("SlowMult"):Connect(function()
+            updateSlowFX(character, other == player)
+        end)
+        updateSlowFX(character, other == player)
+    end
+    other.CharacterAdded:Connect(onCharacter)
+    if other.Character then
+        onCharacter(other.Character)
+    end
+end
+
 -- Other players see a veiled caster as nearly invisible (local-only transparency).
 local function veil(character: Model, duration: number)
     local function setAll(value: number)
@@ -99,13 +201,23 @@ local function onSkillCast(casterUserId: any, styleId: any, slot: any, position:
     local style = Styles.Get(if typeof(styleId) == "string" then styleId else nil)
     local skill = skillFor(style, slot)
 
-    local radius = if skill.kind == "Slow" then skill.radius or 6 else 4
-    pulse(position, radius, Styles.RarityColors[style.rarity])
-    SoundController.PlaySpatialSFX("SlideWhoosh", position, Vector2.new(0.8, 1.0))
+    local color = Styles.RarityColors[style.rarity]
+    if skill.kind == "Slow" then
+        shockwave(position, skill.radius or 6, if (skill.mult or 0.5) <= 0 then Color3.new(1, 1, 1) else ICE_COLOR)
+        pulse(position, 3, ICE_COLOR)
+    else
+        pulse(position, 4, color)
+    end
+    local sfx = SKILL_SFX[skill.kind]
+    SoundController.PlaySpatialSFX(sfx.sound, position, sfx.pitch)
 
     local caster = if typeof(casterUserId) == "number" then Players:GetPlayerByUserId(casterUserId) else nil
-    if skill.kind == "Veil" and caster and caster ~= player and caster.Character then
-        veil(caster.Character, skill.duration or 2)
+    local casterCharacter = if caster then caster.Character else nil
+    if not casterCharacter then return end
+    if skill.kind == "Veil" and caster ~= player then
+        veil(casterCharacter, skill.duration or 2)
+    elseif skill.kind == "Dash" or skill.kind == "Haste" then
+        streak(casterCharacter, color, skill.duration or 0.3)
     end
 end
 
@@ -222,6 +334,12 @@ function StyleController.Init()
     player:GetAttributeChangedSignal("Style"):Connect(refresh)
 
     Remotes.GetEvent("SkillCast").OnClientEvent:Connect(onSkillCast)
+
+    slowedTint.Parent = Workspace.CurrentCamera
+    Players.PlayerAdded:Connect(watchSlows)
+    for _, other in Players:GetPlayers() do
+        watchSlows(other)
+    end
 
     RunService.RenderStepped:Connect(function()
         local style = currentStyle()
