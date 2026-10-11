@@ -27,8 +27,8 @@ local matchState: Types.MatchState = {
     phase = "Lobby",
     roundNumber = 0,
     timeRemaining = Config.Match.IntermissionTime,
-    passerScore = 0,
-    guardScore = 0,
+    redScore = 0,
+    blueScore = 0,
     activePasserCount = 0,
 }
 
@@ -67,6 +67,17 @@ local function broadcastMatchState()
     remote:FireAllClients(matchState)
 end
 
+-- Adds points to the player's side (Player attribute `Side`) and returns that side's new score.
+local function award(player: Player, points: number): number
+    local side = player:GetAttribute("Side")
+    if side == "Red" then
+        matchState.redScore += points
+    elseif side == "Blue" then
+        matchState.blueScore += points
+    end
+    return if side == "Blue" then matchState.blueScore else matchState.redScore
+end
+
 local function teleportToSpawn(player: Player, team: Types.Team, guardRole: Types.GuardRole?)
     local character = player.Character
     if not character then return end
@@ -83,8 +94,9 @@ local function assignTeams()
     table.clear(teamRoster.Passers)
     table.clear(teamRoster.Guards)
 
-    -- Split players evenly into Passers and Guards
+    -- Split players evenly: Red starts as Passers, Blue as Guards (sides stay put when roles swap)
     for i, player in ipairs(allPlayers) do
+        player:SetAttribute("Side", if i % 2 == 1 then "Red" else "Blue")
         if i % 2 == 1 then
             table.insert(teamRoster.Passers, player)
             PlayerStateService.SetTeam(player, "Passers", nil)
@@ -161,11 +173,11 @@ local function checkPasserPositions()
             -- Player must advance strictly in sequence: next checkpoint must be highestZoneCleared + 1
             if currentZone.checkpointIndex == state.highestZoneCleared + 1 then
                 PlayerStateService.SetCheckpoint(player, currentZone.checkpointIndex, currentZone.isEndZone)
-                matchState.passerScore += Config.Match.PointsForZoneAdvance
+                local sideScore = award(player, Config.Match.PointsForZoneAdvance)
                 broadcastMatchState()
 
                 local zoneLabel = if currentZone.isEndZone then "SAFEHOUSE" else currentZone.name
-                checkpointEvent:FireAllClients(player.UserId, zoneLabel, matchState.passerScore)
+                checkpointEvent:FireAllClients(player.UserId, zoneLabel, sideScore)
             end
 
         -- PHASE 2: Inbound Return Journey (Safehouse -> Zone 2 -> Zone 1 -> Home Base)
@@ -173,9 +185,9 @@ local function checkPasserPositions()
             -- Standing in EndZone or intermediate zones awards 0 duplicate points!
             -- Only reaching Home Base with a valid completed trip triggers "TUBIG!"
             if currentZone.isHomeZone and state.hasReachedEndZone then
-                matchState.passerScore += Config.Match.PointsForTubig
+                local sideScore = award(player, Config.Match.PointsForTubig)
                 broadcastMatchState()
-                tubigEvent:FireAllClients(player.UserId, player.DisplayName, matchState.passerScore)
+                tubigEvent:FireAllClients(player.UserId, player.DisplayName, sideScore)
                 StyleService.AddSpins(player, Config.Styles.SpinsPerTubig)
 
                 -- Explicitly reset lap state so player can embark on a new outbound run
@@ -232,8 +244,8 @@ end
 
 function MatchService.Init()
     -- Hook TagService onTagSuccess callback
-    TagService.SetTagSuccessCallback(function(_tagger: Player, target: Player)
-        matchState.guardScore += Config.Match.PointsForTag
+    TagService.SetTagSuccessCallback(function(tagger: Player, target: Player)
+        award(tagger, Config.Match.PointsForTag)
         matchState.activePasserCount = countActivePassers()
         broadcastMatchState()
 
@@ -333,8 +345,8 @@ function MatchService.Init()
 
                 -- Reset match scores
                 matchState.roundNumber = 0
-                matchState.passerScore = 0
-                matchState.guardScore = 0
+                matchState.redScore = 0
+                matchState.blueScore = 0
                 returnToHub()
             else
                 swapTeams()

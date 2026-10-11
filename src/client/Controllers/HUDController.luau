@@ -36,6 +36,7 @@ local hitScale: UIScale
 
 local PASSER_COLOR = Color3.fromRGB(100, 220, 255)
 local GUARD_COLOR = Color3.fromRGB(255, 120, 80)
+local SIDE_COLORS: { [Types.Side]: Color3 } = { Red = Color3.fromRGB(240, 85, 75), Blue = Color3.fromRGB(80, 155, 255) }
 local STAMINA_LOW, STAMINA_MID, STAMINA_HIGH = Color3.fromRGB(220, 50, 50), Color3.fromRGB(255, 215, 0), Color3.fromRGB(50, 205, 50)
 
 -- Every HUD block scales with the screen height so it fits phones and stays crisp on big monitors.
@@ -59,6 +60,12 @@ local function updateDeviceScale()
     for _, scale in scaledBlocks do
         scale.Scale = deviceScale
     end
+end
+
+-- "RED: 5" in the side's color; your own side is underlined so you know which score is yours.
+local function sideScore(side: Types.Side, score: number): string
+    local text = `<font color="#{SIDE_COLORS[side]:ToHex()}">{string.upper(side)}:</font> {score}`
+    return if player:GetAttribute("Side") == side then `<u>{text}</u>` else text
 end
 
 local function formatTime(seconds: number): string
@@ -181,7 +188,7 @@ local function buildUI()
     scoreLabel.TextSize = 17
     scoreLabel.RichText = true
     scoreLabel.TextColor3 = Color3.fromRGB(200, 200, 210)
-    scoreLabel.Text = "PASSERS: 0   |   GUARDS: 0"
+    scoreLabel.Text = "RED: 0   |   BLUE: 0"
     scoreLabel.Parent = topBar
 
     -- Role Badge
@@ -324,8 +331,7 @@ function HUDController.Init()
     local matchStateEvent = Remotes.GetEvent("MatchStateUpdated")
     local lastPulse = -1
     matchStateEvent.OnClientEvent:Connect(function(state: Types.MatchState)
-        scoreLabel.Text = `<font color="#{PASSER_COLOR:ToHex()}">PASSERS:</font> {state.passerScore}   |   `
-            .. `<font color="#{GUARD_COLOR:ToHex()}">GUARDS:</font> {state.guardScore}`
+        scoreLabel.Text = `{sideScore("Red", state.redScore)}   |   {sideScore("Blue", state.blueScore)}`
         timerLabel.TextColor3 = Color3.new(1, 1, 1)
 
         if state.phase == "Lobby" then
@@ -347,8 +353,12 @@ function HUDController.Init()
             timerLabel.Text = "ROUND ENDED - SWAPPING SIDES!"
         elseif state.phase == "MatchOver" then
             timerLabel.Text = "MATCH OVER!"
-            local winText = if state.passerScore > state.guardScore then "PASSERS WIN!" elseif state.guardScore > state.passerScore then "GUARDS WIN!" else "MATCH DRAW!"
-            showBanner(winText, Color3.fromRGB(255, 215, 0))
+            local winner: Types.Side? = if state.redScore > state.blueScore then "Red" elseif state.blueScore > state.redScore then "Blue" else nil
+            if winner then
+                showBanner(`{string.upper(winner)} WINS!`, SIDE_COLORS[winner])
+            else
+                showBanner("MATCH DRAW!", Color3.fromRGB(255, 215, 0))
+            end
         end
     end)
 

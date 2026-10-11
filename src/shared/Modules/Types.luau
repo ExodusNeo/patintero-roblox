@@ -6,6 +6,9 @@
 
 export type Team = "Passers" | "Guards" | "Spectators"
 
+-- Match teams. Red starts as Passers, Blue as Guards; each keeps its side when roles swap for round 2.
+export type Side = "Red" | "Blue"
+
 export type GuardRole = "Line1" | "Line2" | "Line3" | "Patotot"
 
 export type MatchPhase = "Lobby" | "Countdown" | "RoundActive" | "RoundEnded" | "MatchOver"
@@ -44,8 +47,8 @@ export type MatchState = {
     phase: MatchPhase,
     roundNumber: number,
     timeRemaining: number,
-    passerScore: number,
-    guardScore: number,
+    redScore: number,
+    blueScore: number,
     activePasserCount: number,
 }
 
