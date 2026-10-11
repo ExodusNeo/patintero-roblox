@@ -227,16 +227,17 @@ only new systems. If several rows match, load all of them. If none match, say so
   Sarpanch lettering.
 
 ### Style animations & effects (client) — `StyleAnimator`, `SkillEffects`, data in `StyleAnimations`
-- 24 Blender-made animations: `<styleId>_Q`, `<styleId>_E` (one-shots) and `<styleId>_Pose` (looping
-  showcase idle in the Styles menu). `StyleAnimator.Play(character, name)` / `Stop` overrides joint
+- 32 Blender-made animations: `<styleId>_Q`, `<styleId>_E` (one-shots), `<styleId>_Pose` (looping showcase
+  idle in the Styles menu) and `<styleId>_Beat` (the idle's signature move). `StyleAnimator.Play(character, name)` / `Stop` overrides joint
   `Transform`s right after the Animator (`PreSimulation`), blending in/out (0.14 s / 0.15 s) over the
   current animation; joints no Animator drives blend from rest. Works on Motor6D and AnimationConstraint
   rigs and on the ViewportFrame preview. **Nothing is uploaded**: the caster plays its own cast instantly,
   every other client plays it on `SkillCast` (Studio-registered temp animation ids don't work live, so
   real Animation assets would otherwise have to be uploaded by hand).
 - Showcase idles are fighting-game character-select stances: feet planted, slow breathing and weight
-  shift, one sharp signature beat per loop, eyes on the camera (no hops, dances or levitation). After each
-  play-through `StyleAnimator` holds the resting pose for a random 5–9 s before playing it again.
+  shift, eyes on the camera (no hops, dances or levitation). `_Pose` is the constant breathing/bob loop;
+  `StyleAnimator` blends the `_Beat` (signature move, starts and ends on the idle's rest stance) in over it
+  1.5 s after the idle starts, then every 5–9 s (random).
   Tsinelas: ready on the balls of the feet, light bounce, glance down the line; Kanto: arms crossed,
   weight back, chin up, a slow "come on" tilt; Bantay: low wide guard, eyes track then snap to a runner;
   Sipa: bladed guard, rocking weight, a sharp knee check; Tumbang: lead arm sighting, throwing arm cocked,

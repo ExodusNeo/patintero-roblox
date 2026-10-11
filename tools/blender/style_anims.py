@@ -82,8 +82,28 @@ def pose(*parts, **joints):
 
 STAND = dict(RH=(0, 0, 0), RK=(0, 0, 0), RA=(0, 0, 0), LH=(0, 0, 0), LK=(0, 0, 0), LA=(0, 0, 0))
 
-# Showcase loops are fighting-game character-select idles: feet planted on the ground, slow breathing and
-# weight shift, one sharp signature beat per loop, eyes on the camera. No hops, dances or levitation.
+# Resting stance of each style's showcase idle: the _Pose loop breathes around it and the _Beat starts
+# and ends on it, so StyleAnimator can blend the beat in over the loop at any moment.
+TSINELAS_REST = pose(stance(0.16, r=(0.08, 0.12), l=(-0.18, 0.12)), W=(-6, -8, 0), N=(0, 8, 0), RS=(10, 0, 10), RE=(35, 0, 0),
+                     RW=(-10, 0, 0), LS=(-5, 0, -10), LE=(30, 0, 0), LW=(-10, 0, 0))
+KANTO_REST = pose(stance(0.06, r=(0.18, 0.2), l=(-0.12, 0.14), px=-0.1), W=(4, 10, 0), N=(6, -10, 0),
+                  RS=(14, 58, -6), RE=(96, 0, 0), LS=(18, -58, 6), LE=(86, 0, 0))
+BANTAY_REST = pose(stance(0.4, r=(0, 0.42), l=(0, 0.42)), W=(-12, 0, 0), N=(6, 0, 0), RS=(25, 0, 45), RE=(25, 0, 0),
+                   LS=(25, 0, -45), LE=(25, 0, 0))
+SIPA_REST = pose(stance(0.22, r=(-0.28, 0.14), l=(0.22, 0.12), px=-0.04), W=(-6, 18, 0), N=(2, -16, 0),
+                 RS=(55, 0, 22), RE=(105, 0, 0), LS=(62, 0, -14), LE=(98, 0, 0))
+TUMBANG_REST = pose(stance(0.14, r=(-0.3, 0.16), l=(0.32, 0.14), px=0.06), W=(4, -24, 0), N=(0, 22, 0),
+                    RS=(118, 0, 38), RE=(100, 0, 0), LS=(82, 0, -8), LE=(8, 0, 0))
+HABAGAT_REST = pose(stance(0.14, r=(0, 0.22), l=(0, 0.22)), W=(2, 0, 0), N=(0, 0, 0), RS=(8, 0, 16), RE=(22, 0, 0), RW=(0, 0, 0),
+                    LS=(8, 0, -16), LE=(22, 0, 0), LW=(0, 0, 0))
+ANINO_REST = pose(stance(0.85, r=(0.32, 0.16), l=(-0.38, 0.2)), W=(-36, 0, 4), N=(34, 0, 0), RS=(-30, 0, 18), RE=(25, 0, 0),
+                  LS=(88, 0, -10), LE=(6, 0, 0))
+BATHALA_REST = pose(stance(0.03, r=(0.06, 0.18), l=(-0.06, 0.18)), W=(5, 0, 0), N=(8, 0, 0), RS=(18, 0, 12), RE=(55, 0, 0),
+                    RW=(25, 0, 0), LS=(2, 0, -10), LE=(10, 0, 0))
+
+# Showcase idles are fighting-game character-select stances: feet planted, eyes on the camera, no hops,
+# dances or levitation. <Style>_Pose loops the constant breathing/weight shift; <Style>_Beat is the
+# signature move, which StyleAnimator plays over the loop every 5-9 s (random).
 # Skills: anticipation -> strike (Cubic Out) -> short hold -> settle, low and heavy, no celebrating.
 # Impact beats line up with SkillEffects' delays (noted per skill); move both together.
 ANIMS = {
@@ -106,18 +126,20 @@ ANIMS = {
         (0.50, "Sine Out", dict(R=root(-0.22, pz=-0.2), W=(-22, 0, 0), RS=(100, 0, 10), LS=(-48, 0, -10))),
         (0.80, "Quad In", pose(STAND, R=root(-0.15), W=(-15, 0, 0), N=(5, 0, 0), RS=(-20, 0, 5), RE=(60, 0, 0), LS=(20, 0, -5), LE=(60, 0, 0))),
     ]),
-    "Tsinelas_Pose": dict(length=2.0, loop=True, keys=[  # Ready on the balls of the feet: light knee bounce, glance down the line
-        (0.0, "Sine InOut", pose(stance(0.16, r=(0.08, 0.12), l=(-0.18, 0.12)), W=(-6, -8, 0), N=(0, 8, 0), RS=(10, 0, 10), RE=(35, 0, 0),
-                                 RW=(-10, 0, 0), LS=(-5, 0, -10), LE=(30, 0, 0), LW=(-10, 0, 0))),
-        (0.25, "Quad Out", pose(stance(0.26, r=(0.08, 0.12), l=(-0.18, 0.12)), W=(-8, -8, 0), RS=(14, 0, 10), RE=(45, 0, 0), LS=(-9, 0, -10), LE=(40, 0, 0))),
-        (0.5, "Quad In", pose(stance(0.16, r=(0.08, 0.12), l=(-0.18, 0.12)), W=(-6, -8, 0), RS=(10, 0, 10), RE=(35, 0, 0), LS=(-5, 0, -10), LE=(30, 0, 0))),
-        (0.75, "Quad Out", pose(stance(0.26, r=(0.08, 0.12), l=(-0.18, 0.12)), W=(-8, -8, 0), RS=(14, 0, 10), RE=(45, 0, 0), LS=(-9, 0, -10), LE=(40, 0, 0))),
-        (1.0, "Cubic Out", pose(stance(0.18, r=(0.08, 0.12), l=(-0.18, 0.12)), W=(-6, -14, 0), N=(0, -32, 0), RS=(10, 0, 10), RE=(35, 0, 0),
-                                LS=(-5, 0, -10), LE=(30, 0, 0))),
-        (1.45, "Sine Out", pose(stance(0.22, r=(0.08, 0.12), l=(-0.18, 0.12)), N=(0, -28, 0))),
-        (1.7, "Cubic Out", pose(stance(0.16, r=(0.08, 0.12), l=(-0.18, 0.12)), W=(-6, -8, 0), N=(0, 8, 0))),
-        (2.0, "Sine InOut", pose(stance(0.16, r=(0.08, 0.12), l=(-0.18, 0.12)), W=(-6, -8, 0), N=(0, 8, 0), RS=(10, 0, 10), RE=(35, 0, 0),
-                                 RW=(-10, 0, 0), LS=(-5, 0, -10), LE=(30, 0, 0), LW=(-10, 0, 0))),
+    "Tsinelas_Pose": dict(length=1.6, loop=True, keys=[  # Light, constant bounce on the balls of the feet
+        (0.0, "Sine InOut", TSINELAS_REST),
+        (0.4, "Sine InOut", pose(TSINELAS_REST, stance(0.23, r=(0.08, 0.12), l=(-0.18, 0.12)), W=(-8, -8, 0), RS=(13, 0, 10), RE=(42, 0, 0),
+                                 LS=(-8, 0, -10), LE=(37, 0, 0))),
+        (0.8, "Sine InOut", TSINELAS_REST),
+        (1.2, "Sine InOut", pose(TSINELAS_REST, stance(0.23, r=(0.08, 0.12), l=(-0.18, 0.12)), W=(-8, -8, 0), RS=(13, 0, 10), RE=(42, 0, 0),
+                                 LS=(-8, 0, -10), LE=(37, 0, 0))),
+        (1.6, "Sine InOut", TSINELAS_REST),
+    ]),
+    "Tsinelas_Beat": dict(length=1.2, loop=False, keys=[  # Glance down the line, then back to the camera
+        (0.0, "Sine InOut", TSINELAS_REST),
+        (0.3, "Cubic Out", pose(TSINELAS_REST, W=(-6, -14, 0), N=(0, -32, 0))),
+        (0.8, "Sine Out", pose(TSINELAS_REST, W=(-6, -14, 0), N=(0, -28, 0))),
+        (1.2, "Sine InOut", TSINELAS_REST),
     ]),
 
     # ---------------- Kanto (street-corner endurance) ----------------
@@ -139,15 +161,17 @@ ANIMS = {
         (1.00, "Sine InOut", pose(stance(0.08, r=(0.05, 0.2), l=(0.05, 0.2)), W=(-3, 0, 0), N=(0, 0, 0), RS=(5, 0, 8), RE=(20, 0, 0),
                                   LS=(5, 0, -8), LE=(20, 0, 0))),
     ]),
-    "Kanto_Pose": dict(length=2.8, loop=True, keys=[  # Arms crossed on the corner, weight back, chin up; a slow "come on" tilt
-        (0.0, "Sine InOut", pose(stance(0.06, r=(0.18, 0.2), l=(-0.12, 0.14), px=-0.1), W=(4, 10, 0), N=(6, -10, 0),
-                                 RS=(14, 58, -6), RE=(96, 0, 0), LS=(18, -58, 6), LE=(86, 0, 0))),
-        (1.0, "Sine InOut", pose(stance(0.03, r=(0.18, 0.2), l=(-0.12, 0.14), px=-0.12), W=(7, 10, 0), N=(8, -10, 0),
+    "Kanto_Pose": dict(length=2.4, loop=True, keys=[  # Arms crossed, weight back, slow breath
+        (0.0, "Sine InOut", KANTO_REST),
+        (1.2, "Sine InOut", pose(KANTO_REST, stance(0.03, r=(0.18, 0.2), l=(-0.12, 0.14), px=-0.12), W=(7, 10, 0), N=(8, -10, 0),
                                  RS=(16, 58, -7), LS=(20, -58, 7))),
-        (1.5, "Cubic Out", pose(stance(0.06, r=(0.18, 0.2), l=(-0.12, 0.14), px=-0.1), W=(4, 14, 0), N=(14, -6, 12))),
-        (2.1, "Sine InOut", pose(stance(0.06, r=(0.18, 0.2), l=(-0.12, 0.14), px=-0.1), N=(12, -6, 10))),
-        (2.8, "Sine InOut", pose(stance(0.06, r=(0.18, 0.2), l=(-0.12, 0.14), px=-0.1), W=(4, 10, 0), N=(6, -10, 0),
-                                 RS=(14, 58, -6), RE=(96, 0, 0), LS=(18, -58, 6), LE=(86, 0, 0))),
+        (2.4, "Sine InOut", KANTO_REST),
+    ]),
+    "Kanto_Beat": dict(length=1.6, loop=False, keys=[  # A slow "come on" tilt of the head
+        (0.0, "Sine InOut", KANTO_REST),
+        (0.5, "Cubic Out", pose(KANTO_REST, W=(4, 14, 0), N=(14, -6, 12))),
+        (1.1, "Sine Out", pose(KANTO_REST, W=(4, 14, 0), N=(12, -6, 10))),
+        (1.6, "Sine InOut", KANTO_REST),
     ]),
 
     # ---------------- Bantay (born to guard) ----------------
@@ -168,14 +192,16 @@ ANIMS = {
         (0.85, "Sine InOut", pose(stance(0.4, r=(0, 0.4), l=(0, 0.4)), W=(4, 0, 0), N=(4, 0, 0), RS=(8, 0, 88), LS=(8, 0, -88),
                                   RE=(5, 0, 0), LE=(5, 0, 0))),
     ]),
-    "Bantay_Pose": dict(length=2.4, loop=True, keys=[  # Low guard on the line, arms wide; eyes track, then snap to a runner
-        (0.0, "Sine InOut", pose(stance(0.4, r=(0, 0.42), l=(0, 0.42)), W=(-12, 0, 0), N=(6, 0, 0), RS=(25, 0, 45), RE=(25, 0, 0),
-                                 LS=(25, 0, -45), LE=(25, 0, 0))),
-        (0.7, "Sine InOut", pose(stance(0.43, r=(0, 0.42), l=(0, 0.42)), W=(-12, 8, 0), N=(6, 18, 0), RS=(25, 0, 48), LS=(25, 0, -42))),
-        (1.0, "Cubic Out", pose(stance(0.46, r=(0, 0.42), l=(0, 0.42)), W=(-14, -10, 0), N=(4, -28, 0), RS=(28, 0, 52), LS=(28, 0, -52))),
-        (1.6, "Sine Out", pose(stance(0.44, r=(0, 0.42), l=(0, 0.42)), W=(-13, -8, 0), N=(5, -24, 0))),
-        (2.4, "Sine InOut", pose(stance(0.4, r=(0, 0.42), l=(0, 0.42)), W=(-12, 0, 0), N=(6, 0, 0), RS=(25, 0, 45), RE=(25, 0, 0),
-                                 LS=(25, 0, -45), LE=(25, 0, 0))),
+    "Bantay_Pose": dict(length=2.4, loop=True, keys=[  # Low guard on the line, breathing, eyes drifting
+        (0.0, "Sine InOut", BANTAY_REST),
+        (1.2, "Sine InOut", pose(BANTAY_REST, stance(0.44, r=(0, 0.42), l=(0, 0.42)), W=(-13, 6, 0), N=(6, 12, 0), RS=(26, 0, 47), LS=(26, 0, -43))),
+        (2.4, "Sine InOut", BANTAY_REST),
+    ]),
+    "Bantay_Beat": dict(length=1.6, loop=False, keys=[  # Eyes snap to a runner
+        (0.0, "Sine InOut", BANTAY_REST),
+        (0.3, "Cubic Out", pose(BANTAY_REST, stance(0.46, r=(0, 0.42), l=(0, 0.42)), W=(-14, -10, 0), N=(4, -28, 0), RS=(28, 0, 52), LS=(28, 0, -52))),
+        (0.9, "Sine Out", pose(BANTAY_REST, stance(0.44, r=(0, 0.42), l=(0, 0.42)), W=(-13, -8, 0), N=(5, -24, 0), RS=(28, 0, 52), LS=(28, 0, -52))),
+        (1.6, "Sine InOut", BANTAY_REST),
     ]),
 
     # ---------------- Sipa (kick past the line) ----------------
@@ -200,18 +226,20 @@ ANIMS = {
         (0.75, "Quad In", pose(stance(0.15, r=(0, 0.12), l=(0, 0.12)), W=(-15, 0, 0), N=(5, 0, 0), RS=(-15, 0, 10), RE=(60, 0, 0),
                                LS=(15, 0, -10), LE=(60, 0, 0))),
     ]),
-    "Sipa_Pose": dict(length=2.4, loop=True, keys=[  # Bladed stance, guard up, weight rocking; a sharp knee check
-        (0.0, "Sine InOut", pose(stance(0.22, r=(-0.28, 0.14), l=(0.22, 0.12), px=-0.04), W=(-6, 18, 0), N=(2, -16, 0),
-                                 RS=(55, 0, 22), RE=(105, 0, 0), LS=(62, 0, -14), LE=(98, 0, 0))),
-        (0.6, "Sine InOut", pose(stance(0.25, r=(-0.28, 0.14), l=(0.22, 0.12), px=0.04), W=(-7, 16, 0), N=(2, -14, 0))),
-        (1.0, "Sine In", pose(stance(0.2, r=(-0.28, 0.14), l=(0.22, 0.12), px=-0.1), W=(-6, 18, 0), N=(2, -16, 0))),
-        (1.2, "Cubic Out", pose(leg("L", 0.14, 0.22, 0.02), R=root(-0.14, px=-0.1), RH=(92, 0, 8), RK=(-115, 0, 0), RA=(-20, 0, 0),
+    "Sipa_Pose": dict(length=1.4, loop=True, keys=[  # Bladed guard, weight rocking foot to foot
+        (0.0, "Sine InOut", SIPA_REST),
+        (0.7, "Sine InOut", pose(SIPA_REST, stance(0.25, r=(-0.28, 0.14), l=(0.22, 0.12), px=0.04), W=(-7, 16, 0), N=(2, -14, 0))),
+        (1.4, "Sine InOut", SIPA_REST),
+    ]),
+    "Sipa_Beat": dict(length=1.5, loop=False, keys=[  # Weight onto the lead leg, a sharp knee check, set it down
+        (0.0, "Sine InOut", SIPA_REST),
+        (0.25, "Sine In", pose(SIPA_REST, stance(0.2, r=(-0.28, 0.14), l=(0.22, 0.12), px=-0.1))),
+        (0.45, "Cubic Out", pose(SIPA_REST, leg("L", 0.14, 0.22, 0.02), R=root(-0.14, px=-0.1), RH=(92, 0, 8), RK=(-115, 0, 0), RA=(-20, 0, 0),
+                                 W=(-10, 22, 0), N=(4, -20, 0), RS=(48, 0, 18), RE=(110, 0, 0), LS=(58, 0, -12), LE=(100, 0, 0))),
+        (0.75, "Sine Out", pose(SIPA_REST, leg("L", 0.15, 0.22, 0.02), R=root(-0.15, px=-0.1), RH=(88, 0, 8), RK=(-112, 0, 0), RA=(-20, 0, 0),
                                 W=(-10, 22, 0), N=(4, -20, 0), RS=(48, 0, 18), RE=(110, 0, 0), LS=(58, 0, -12), LE=(100, 0, 0))),
-        (1.5, "Sine Out", pose(leg("L", 0.15, 0.22, 0.02), R=root(-0.15, px=-0.1), RH=(88, 0, 8), RK=(-112, 0, 0))),
-        (1.75, "Cubic Out", pose(stance(0.24, r=(-0.28, 0.14), l=(0.22, 0.12), px=-0.04), W=(-6, 18, 0), N=(2, -16, 0),
-                                 RS=(55, 0, 22), RE=(105, 0, 0), LS=(62, 0, -14), LE=(98, 0, 0))),
-        (2.4, "Sine InOut", pose(stance(0.22, r=(-0.28, 0.14), l=(0.22, 0.12), px=-0.04), W=(-6, 18, 0), N=(2, -16, 0),
-                                 RS=(55, 0, 22), RE=(105, 0, 0), LS=(62, 0, -14), LE=(98, 0, 0))),
+        (1.0, "Cubic Out", SIPA_REST),
+        (1.5, "Sine InOut", SIPA_REST),
     ]),
 
     # ---------------- Tumbang (knock the can) ----------------
@@ -232,18 +260,20 @@ ANIMS = {
         (0.85, "Sine InOut", pose(stance(0.45, r=(-0.4, 0.15), l=(0.55, 0.15), pz=-0.08), W=(-28, -12, 0), N=(2, 10, 0), RS=(25, 0, 10),
                                   RE=(20, 0, 0))),
     ]),
-    "Tumbang_Pose": dict(length=2.6, loop=True, keys=[  # Sighting the can: lead arm points, throwing arm cocked; a pump fake
-        (0.0, "Sine InOut", pose(stance(0.14, r=(-0.3, 0.16), l=(0.32, 0.14), px=0.06), W=(4, -24, 0), N=(0, 22, 0),
-                                 RS=(118, 0, 38), RE=(100, 0, 0), LS=(82, 0, -8), LE=(8, 0, 0))),
-        (1.0, "Sine InOut", pose(stance(0.11, r=(-0.3, 0.16), l=(0.32, 0.14), px=0.08), W=(6, -26, 0), N=(2, 22, 0),
+    "Tumbang_Pose": dict(length=2.2, loop=True, keys=[  # Sighting the can, throwing arm cocked, breathing
+        (0.0, "Sine InOut", TUMBANG_REST),
+        (1.1, "Sine InOut", pose(TUMBANG_REST, stance(0.11, r=(-0.3, 0.16), l=(0.32, 0.14), px=0.08), W=(6, -26, 0), N=(2, 22, 0),
                                  RS=(124, 0, 40), LS=(84, 0, -8))),
-        (1.3, "Cubic Out", pose(stance(0.2, r=(-0.3, 0.16), l=(0.32, 0.14), px=0.0, pz=-0.06), W=(-6, -10, 0), N=(0, 12, 0),
+        (2.2, "Sine InOut", TUMBANG_REST),
+    ]),
+    "Tumbang_Beat": dict(length=1.3, loop=False, keys=[  # A pump fake
+        (0.0, "Sine InOut", TUMBANG_REST),
+        (0.3, "Cubic Out", pose(TUMBANG_REST, stance(0.2, r=(-0.3, 0.16), l=(0.32, 0.14), pz=-0.06), W=(-6, -10, 0), N=(0, 12, 0),
                                 RS=(105, 0, 25), RE=(60, 0, 0), LS=(70, 0, -12), LE=(15, 0, 0))),
-        (1.55, "Sine Out", pose(stance(0.19, r=(-0.3, 0.16), l=(0.32, 0.14), px=0.0, pz=-0.06))),
-        (2.0, "Cubic Out", pose(stance(0.14, r=(-0.3, 0.16), l=(0.32, 0.14), px=0.06), W=(4, -24, 0), N=(0, 22, 0),
-                                RS=(118, 0, 38), RE=(100, 0, 0), LS=(82, 0, -8), LE=(8, 0, 0))),
-        (2.6, "Sine InOut", pose(stance(0.14, r=(-0.3, 0.16), l=(0.32, 0.14), px=0.06), W=(4, -24, 0), N=(0, 22, 0),
-                                 RS=(118, 0, 38), RE=(100, 0, 0), LS=(82, 0, -8), LE=(8, 0, 0))),
+        (0.55, "Sine Out", pose(TUMBANG_REST, stance(0.19, r=(-0.3, 0.16), l=(0.32, 0.14), pz=-0.06), W=(-6, -10, 0), N=(0, 12, 0),
+                                RS=(105, 0, 25), RE=(60, 0, 0), LS=(70, 0, -12), LE=(15, 0, 0))),
+        (0.95, "Cubic Out", TUMBANG_REST),
+        (1.3, "Sine InOut", TUMBANG_REST),
     ]),
 
     # ---------------- Habagat (monsoon wind) ----------------
@@ -264,16 +294,20 @@ ANIMS = {
                                RE=(0, 0, 0), LE=(0, 0, 0))),
         (0.90, "Sine InOut", pose(stance(0.6, r=(0, 0.45), l=(0, 0.45)), W=(-20, 0, 0), N=(2, 0, 0), RS=(45, 0, 45), LS=(45, 0, -45))),
     ]),
-    "Habagat_Pose": dict(length=3.2, loop=True, keys=[  # Centered and still: a slow breath, palms rise to the chest and press down
-        (0.0, "Sine InOut", pose(stance(0.14, r=(0, 0.22), l=(0, 0.22)), W=(2, 0, 0), N=(0, 0, 0), RS=(8, 0, 16), RE=(22, 0, 0), RW=(0, 0, 0),
-                                 LS=(8, 0, -16), LE=(22, 0, 0), LW=(0, 0, 0))),
-        (1.2, "Sine InOut", pose(stance(0.08, r=(0, 0.22), l=(0, 0.22)), W=(5, 0, 0), N=(4, 0, 0), RS=(62, 0, 14), RE=(48, 0, 0), RW=(-25, 0, 0),
-                                 LS=(62, 0, -14), LE=(48, 0, 0), LW=(-25, 0, 0))),
-        (1.6, "Sine Out", pose(stance(0.08, r=(0, 0.22), l=(0, 0.22)), RS=(64, 0, 14), LS=(64, 0, -14))),
-        (2.5, "Sine InOut", pose(stance(0.22, r=(0, 0.22), l=(0, 0.22)), W=(-2, 0, 0), N=(-2, 0, 0), RS=(12, 0, 20), RE=(12, 0, 0), RW=(-30, 0, 0),
-                                 LS=(12, 0, -20), LE=(12, 0, 0), LW=(-30, 0, 0))),
-        (3.2, "Sine InOut", pose(stance(0.14, r=(0, 0.22), l=(0, 0.22)), W=(2, 0, 0), N=(0, 0, 0), RS=(8, 0, 16), RE=(22, 0, 0), RW=(0, 0, 0),
-                                 LS=(8, 0, -16), LE=(22, 0, 0), LW=(0, 0, 0))),
+    "Habagat_Pose": dict(length=2.8, loop=True, keys=[  # Centered and still, a slow deep breath
+        (0.0, "Sine InOut", HABAGAT_REST),
+        (1.4, "Sine InOut", pose(HABAGAT_REST, stance(0.1, r=(0, 0.22), l=(0, 0.22)), W=(4, 0, 0), N=(2, 0, 0), RS=(10, 0, 18), LS=(10, 0, -18))),
+        (2.8, "Sine InOut", HABAGAT_REST),
+    ]),
+    "Habagat_Beat": dict(length=2.4, loop=False, keys=[  # Palms rise to the chest and press down
+        (0.0, "Sine InOut", HABAGAT_REST),
+        (1.0, "Sine InOut", pose(HABAGAT_REST, stance(0.08, r=(0, 0.22), l=(0, 0.22)), W=(5, 0, 0), N=(4, 0, 0), RS=(62, 0, 14), RE=(48, 0, 0),
+                                 RW=(-25, 0, 0), LS=(62, 0, -14), LE=(48, 0, 0), LW=(-25, 0, 0))),
+        (1.3, "Sine Out", pose(HABAGAT_REST, stance(0.08, r=(0, 0.22), l=(0, 0.22)), W=(5, 0, 0), N=(4, 0, 0), RS=(64, 0, 14), RE=(48, 0, 0),
+                               RW=(-25, 0, 0), LS=(64, 0, -14), LE=(48, 0, 0), LW=(-25, 0, 0))),
+        (2.0, "Sine InOut", pose(HABAGAT_REST, stance(0.22, r=(0, 0.22), l=(0, 0.22)), W=(-2, 0, 0), N=(-2, 0, 0), RS=(12, 0, 20), RE=(12, 0, 0),
+                                 RW=(-30, 0, 0), LS=(12, 0, -20), LE=(12, 0, 0), LW=(-30, 0, 0))),
+        (2.4, "Sine InOut", HABAGAT_REST),
     ]),
 
     # ---------------- Anino (a shadow on the street) ----------------
@@ -292,14 +326,16 @@ ANIMS = {
         (0.90, "Sine InOut", pose(stance(0.45, r=(0.2, 0.18), l=(-0.2, 0.18)), W=(-20, 0, 0), N=(10, 0, 0), RS=(40, 0, -10), LS=(40, 0, 10),
                                   RE=(50, 0, 0), LE=(50, 0, 0))),
     ]),
-    "Anino_Pose": dict(length=2.4, loop=True, keys=[  # Low crouch, one hand on the asphalt, eyes up; a sharp tilt of the head
-        (0.0, "Sine InOut", pose(stance(0.85, r=(0.32, 0.16), l=(-0.38, 0.2)), W=(-36, 0, 4), N=(34, 0, 0), RS=(-30, 0, 18), RE=(25, 0, 0),
-                                 LS=(88, 0, -10), LE=(6, 0, 0))),
-        (1.0, "Sine InOut", pose(stance(0.8, r=(0.32, 0.16), l=(-0.38, 0.2)), W=(-34, 0, -4), N=(36, 0, 0), RS=(-28, 0, 20), LS=(86, 0, -10))),
-        (1.3, "Cubic Out", pose(stance(0.83, r=(0.32, 0.16), l=(-0.38, 0.2)), W=(-36, 6, 0), N=(36, -8, 14))),
-        (1.8, "Sine Out", pose(stance(0.84, r=(0.32, 0.16), l=(-0.38, 0.2)), N=(35, -6, 12))),
-        (2.4, "Sine InOut", pose(stance(0.85, r=(0.32, 0.16), l=(-0.38, 0.2)), W=(-36, 0, 4), N=(34, 0, 0), RS=(-30, 0, 18), RE=(25, 0, 0),
-                                 LS=(88, 0, -10), LE=(6, 0, 0))),
+    "Anino_Pose": dict(length=2.2, loop=True, keys=[  # Low crouch, hand on the asphalt, a slow sway
+        (0.0, "Sine InOut", ANINO_REST),
+        (1.1, "Sine InOut", pose(ANINO_REST, stance(0.8, r=(0.32, 0.16), l=(-0.38, 0.2)), W=(-34, 0, -4), N=(36, 0, 0), RS=(-28, 0, 20), LS=(86, 0, -10))),
+        (2.2, "Sine InOut", ANINO_REST),
+    ]),
+    "Anino_Beat": dict(length=1.3, loop=False, keys=[  # A sharp tilt of the head
+        (0.0, "Sine InOut", ANINO_REST),
+        (0.3, "Cubic Out", pose(ANINO_REST, stance(0.83, r=(0.32, 0.16), l=(-0.38, 0.2)), W=(-36, 6, 0), N=(36, -8, 14))),
+        (0.8, "Sine Out", pose(ANINO_REST, stance(0.84, r=(0.32, 0.16), l=(-0.38, 0.2)), W=(-36, 6, 0), N=(35, -6, 12))),
+        (1.3, "Sine InOut", ANINO_REST),
     ]),
 
     # ---------------- Bathala (the street bows) ----------------
@@ -319,14 +355,18 @@ ANIMS = {
         (0.85, "Sine InOut", pose(stance(0.4, r=(0.4, 0.2), l=(-0.45, 0.2), pz=-0.1), RS=(88, 0, 0), RW=(68, 0, 0))),
         (1.00, "Sine InOut", pose(stance(0.25, r=(0.25, 0.2), l=(-0.3, 0.2)), W=(-3, -5, 0), N=(4, 0, 0), RS=(60, 0, 5), RE=(25, 0, 0), RW=(20, 0, 0))),
     ]),
-    "Bathala_Pose": dict(length=3.0, loop=True, keys=[  # Standing tall, chin up; the open palm slowly rises to halt the camera
-        (0.0, "Sine InOut", pose(stance(0.03, r=(0.06, 0.18), l=(-0.06, 0.18)), W=(5, 0, 0), N=(8, 0, 0), RS=(18, 0, 12), RE=(55, 0, 0),
-                                 RW=(25, 0, 0), LS=(2, 0, -10), LE=(10, 0, 0))),
-        (0.8, "Sine InOut", pose(stance(0.0, r=(0.06, 0.18), l=(-0.06, 0.18)), W=(7, 0, 0), N=(10, 0, 0))),
-        (1.5, "Cubic Out", pose(stance(0.05, r=(0.06, 0.18), l=(-0.06, 0.18)), W=(4, 4, 0), N=(8, -4, 0), RS=(78, 0, 8), RE=(18, 0, 0), RW=(62, 0, 0))),
-        (2.2, "Sine Out", pose(stance(0.04, r=(0.06, 0.18), l=(-0.06, 0.18)), RS=(76, 0, 8), RW=(60, 0, 0))),
-        (3.0, "Sine InOut", pose(stance(0.03, r=(0.06, 0.18), l=(-0.06, 0.18)), W=(5, 0, 0), N=(8, 0, 0), RS=(18, 0, 12), RE=(55, 0, 0),
-                                 RW=(25, 0, 0), LS=(2, 0, -10), LE=(10, 0, 0))),
+    "Bathala_Pose": dict(length=2.8, loop=True, keys=[  # Standing tall, chin up, a slow breath
+        (0.0, "Sine InOut", BATHALA_REST),
+        (1.4, "Sine InOut", pose(BATHALA_REST, stance(0.0, r=(0.06, 0.18), l=(-0.06, 0.18)), W=(7, 0, 0), N=(10, 0, 0))),
+        (2.8, "Sine InOut", BATHALA_REST),
+    ]),
+    "Bathala_Beat": dict(length=2.0, loop=False, keys=[  # The open palm slowly rises to halt the camera
+        (0.0, "Sine InOut", BATHALA_REST),
+        (0.7, "Cubic Out", pose(BATHALA_REST, stance(0.05, r=(0.06, 0.18), l=(-0.06, 0.18)), W=(4, 4, 0), N=(8, -4, 0), RS=(78, 0, 8), RE=(18, 0, 0),
+                                RW=(62, 0, 0))),
+        (1.4, "Sine Out", pose(BATHALA_REST, stance(0.04, r=(0.06, 0.18), l=(-0.06, 0.18)), W=(4, 4, 0), N=(8, -4, 0), RS=(76, 0, 8), RE=(18, 0, 0),
+                               RW=(60, 0, 0))),
+        (2.0, "Sine InOut", BATHALA_REST),
     ]),
 }
 
