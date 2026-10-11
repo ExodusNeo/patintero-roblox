@@ -274,7 +274,8 @@ function MatchService.Init()
             -- 1. Lobby Phase
             matchState.phase = "Lobby"
             broadcastMatchState()
-            while #Players:GetPlayers() < Config.Match.MinPlayersToStart do
+            -- A smaller group sent on purpose by the hub (e.g. the owner's 1-player test pad) may start
+            while #Players:GetPlayers() < math.min(Config.Match.MinPlayersToStart, expectedPlayers) do
                 task.wait(1)
             end
             local arrivalDeadline = os.clock() + Config.Match.ArrivalTimeout

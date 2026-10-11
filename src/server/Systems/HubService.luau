@@ -8,6 +8,7 @@
 ]]
 
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 local TeleportService = game:GetService("TeleportService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -138,6 +139,12 @@ local function isOnPad(player: Player, part: BasePart): boolean
     return Vector2.new(offset.X, offset.Z).Magnitude <= part.Size.Y / 2 and math.abs(offset.Y) < 8
 end
 
+-- Pads with the OwnerOnly attribute (the 1-player test pad) only queue the game's owner, or anyone in Studio.
+-- shortcut: compares to game.CreatorId, which is a group id for group-owned games; check group rank if the game moves to a group.
+local function canUsePad(player: Player, part: BasePart): boolean
+    return not part:GetAttribute("OwnerOnly") or player.UserId == game.CreatorId or RunService:IsStudio()
+end
+
 local function setLabel(pad: Pad, text: string)
     if pad.label then
         pad.label.Text = text
@@ -193,7 +200,7 @@ local function updatePad(pad: Pad, now: number)
     -- First come, first served; extra players on a full pad are not queued.
     for _, player in Players:GetPlayers() do
         if #occupants >= size then break end
-        if not table.find(occupants, player) and not player:GetAttribute("Teleporting") and isOnPad(player, pad.part) then
+        if not table.find(occupants, player) and not player:GetAttribute("Teleporting") and canUsePad(player, pad.part) and isOnPad(player, pad.part) then
             table.insert(occupants, player)
         end
     end
@@ -208,7 +215,8 @@ local function updatePad(pad: Pad, now: number)
         end
     else
         pad.countdownEnds = nil
-        setLabel(pad, `{size} PLAYERS\n{#occupants}/{size}`)
+        local title = if pad.part:GetAttribute("OwnerOnly") then "OWNER TEST" else `{size} PLAYERS`
+        setLabel(pad, `{title}\n{#occupants}/{size}`)
     end
 end
 

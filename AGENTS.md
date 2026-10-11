@@ -106,6 +106,10 @@ only new systems. If several rows match, load all of them. If none match, say so
   `Workspace.Hub.Pads`; add or move pads freely). A full pad counts down (`Config.Hub.CountdownTime`),
   cancelled if anyone steps off, then `HubService` reserves a match server and `TravelService`
   teleports the group.
+- **Owner test pad** (`Workspace.Hub.Pads.PadTest`, beside the spawn): `PadSize` 1 + `OwnerOnly`
+  attribute, so only the game's owner (`game.CreatorId`; anyone in Studio) can queue on it. It lets the
+  owner run the full hub → match → hub loop alone in the live game; the match server starts with
+  `min(MinPlayersToStart, expectedPlayers)` players.
 - Spinning for Styles happens **only in the hub**. Skills (Q/E) can be tried in the hub.
 - Data is saved and released before every teleport (`DataService.Release`) so the next server
   never loads stale spins; the `Teleporting` player attribute blocks spins/queueing meanwhile.
