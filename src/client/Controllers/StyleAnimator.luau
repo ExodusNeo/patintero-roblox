@@ -15,8 +15,12 @@ local StyleAnimations = require(ReplicatedStorage.Shared.Modules.StyleAnimations
 
 local StyleAnimator = {}
 
-local FADE_IN = 0.08
+local FADE_IN = 0.14 -- eases into a skill instead of snapping straight to its first pose
 local FADE_OUT = 0.15
+-- A looped <Style>_Pose keeps playing; its <Style>_Beat (the signature move) blends in over it now and then
+local BEAT_EVERY_MIN, BEAT_EVERY_MAX = 5, 9 -- seconds between beats (random)
+local FIRST_BEAT = 1.5 -- soon after the idle starts, so a freshly shown style does its move
+local BEAT_FADE = 0.3
 
 type Clip = {
     length: number,
@@ -27,7 +31,16 @@ type Clip = {
     directions: { Enum.EasingDirection },
     frames: { { CFrame } },
 }
-type Playback = { clip: Clip, joints: { [number]: Instance }, started: number, fadeOutAt: number? }
+type Playback = {
+    clip: Clip,
+    joints: { [number]: Instance },
+    started: number,
+    fadeOutAt: number?,
+    beat: Clip?,
+    beatJoint: { [number]: number }, -- clip joint index -> beat joint index
+    beatAt: number?,
+    nextBeat: number,
+}
 
 local clips: { [string]: Clip } = {}
 local playing: { [Model]: Playback } = {}
@@ -57,6 +70,25 @@ local function getClip(name: string): Clip?
     end
     clips[name] = clip
     return clip
+end
+
+local function beatGap(): number
+    return BEAT_EVERY_MIN + math.random() * (BEAT_EVERY_MAX - BEAT_EVERY_MIN)
+end
+
+-- The key segment containing t: its two frames and the eased alpha between them
+local function segment(clip: Clip, t: number): ({ CFrame }, { CFrame }, number)
+    local times = clip.times
+    local k = #times
+    for i = 2, #times do
+        if t <= times[i] then
+            k = i
+            break
+        end
+    end
+    local span = times[k] - times[math.max(k - 1, 1)]
+    local alpha = if span > 0 then math.clamp((t - times[k - 1]) / span, 0, 1) else 1
+    return clip.frames[math.max(k - 1, 1)], clip.frames[k], TweenService:GetValue(alpha, clip.styles[k], clip.directions[k])
 end
 
 local function findJoints(character: Model, names: { string }): { [number]: Instance }
@@ -99,20 +131,28 @@ local function step()
             continue
         end
 
-        -- Segment [k - 1, k] containing t, eased with the target key's easing
-        local times = clip.times
-        local t = if clip.looped then elapsed % clip.length else elapsed
-        local k = #times
-        for i = 2, #times do
-            if t <= times[i] then
-                k = i
-                break
+        local from, to, alpha = segment(clip, if clip.looped then elapsed % clip.length else elapsed)
+
+        -- The signature beat, blended in over the looping idle every few seconds (it starts and ends on
+        -- the idle's resting pose, so the blend never jumps)
+        local beatFrom: { CFrame }?, beatTo: { CFrame }?, beatAlpha, beatWeight = nil, nil, 0, 0
+        local beat = playback.beat
+        if beat then
+            if not playback.beatAt and now >= playback.nextBeat then
+                playback.beatAt = now
+            end
+            local beatAt = playback.beatAt
+            if beatAt then
+                local t = now - beatAt
+                if t >= beat.length then
+                    playback.beatAt = nil
+                    playback.nextBeat = now + beatGap()
+                else
+                    beatFrom, beatTo, beatAlpha = segment(beat, t)
+                    beatWeight = math.min(1, t / BEAT_FADE, (beat.length - t) / BEAT_FADE)
+                end
             end
         end
-        local from, to = clip.frames[math.max(k - 1, 1)], clip.frames[k]
-        local span = times[k] - times[math.max(k - 1, 1)]
-        local alpha = if span > 0 then math.clamp((t - times[k - 1]) / span, 0, 1) else 1
-        alpha = TweenService:GetValue(alpha, clip.styles[k], clip.directions[k])
 
         for j = 1, #clip.joints do
             local joint = playback.joints[j]
@@ -121,6 +161,10 @@ local function step()
                 local current: CFrame = target.Transform
                 local base = if written[joint] == current then CFrame.identity else current
                 local pose = from[j]:Lerp(to[j], alpha)
+                local b = playback.beatJoint[j]
+                if beatFrom and beatTo and b then
+                    pose = pose:Lerp(beatFrom[b]:Lerp(beatTo[b], beatAlpha), beatWeight)
+                end
                 local value = if weight >= 1 then pose else base:Lerp(pose, weight)
                 target.Transform = value
                 written[joint] = value
@@ -130,11 +174,30 @@ local function step()
 end
 
 -- Plays `name` (e.g. "Tsinelas_Q", "Bathala_Pose") on the character, replacing what it was playing.
--- Looped animations run until Stop. Returns false if there is no such animation.
+-- Looped animations run until Stop; a looped "<Style>_Pose" also plays its "<Style>_Beat" over itself every
+-- 5-9 s. Returns false if there is no such animation.
 function StyleAnimator.Play(character: Model, name: string): boolean
     local clip = getClip(name)
     if not clip then return false end
-    playing[character] = { clip = clip, joints = findJoints(character, clip.joints), started = os.clock(), fadeOutAt = nil }
+    local style = if clip.looped then string.match(name, "^(.+)_Pose$") else nil
+    local beat = if style then getClip(style .. "_Beat") else nil
+    local beatJoint: { [number]: number } = {}
+    if beat then
+        for j, jointName in clip.joints do
+            beatJoint[j] = table.find(beat.joints, jointName)
+        end
+    end
+    local now = os.clock()
+    playing[character] = {
+        clip = clip,
+        joints = findJoints(character, clip.joints),
+        started = now,
+        fadeOutAt = nil,
+        beat = beat,
+        beatJoint = beatJoint,
+        beatAt = nil,
+        nextBeat = now + FIRST_BEAT,
+    }
     return true
 end
 

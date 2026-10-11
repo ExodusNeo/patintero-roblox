@@ -36,10 +36,12 @@ local PAD_COLORS: { [number]: Color3 } = {
 
 local pads: { Pad } = {}
 
-local SIGN_FONT = Font.new("rbxasset://fonts/families/Oswald.json", Enum.FontWeight.Bold)
+local SIGN_FONT = Font.new("rbxasset://fonts/families/Sarpanch.json", Enum.FontWeight.Heavy)
+local SIGN_PATCH = "rbxassetid://104932187263089" -- UIKit.Art.Patch (the client's "Kanto Night" art)
+local SIGN_MARK = "rbxassetid://123140937052663" -- UIKit.Art.TeamMark
 
--- Queue-pad sign in the Styles menu's look: night-slate plate, pad-colored edge, scoreboard lettering.
--- Runs on every pad at start, so saved pads and freshly built ones match.
+-- Queue-pad sign in the "Kanto Night" look: torn dark patch, a chalk mark in the pad's color, Sarpanch
+-- lettering. Runs on every pad at start, so saved pads and freshly built ones match.
 local function dressSign(pad: BasePart)
     local label = pad:FindFirstChild("Status", true)
     local billboard = if label then label.Parent else nil
@@ -47,30 +49,30 @@ local function dressSign(pad: BasePart)
         return
     end
     billboard.Size = UDim2.fromOffset(230, 84)
-    local plate = Instance.new("Frame")
+    local plate = Instance.new("ImageLabel")
     plate.Name = "Plate"
     plate.Size = UDim2.fromScale(1, 1)
-    plate.BackgroundColor3 = Color3.fromRGB(19, 24, 32)
-    plate.BackgroundTransparency = 0.1
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 4)
-    corner.Parent = plate
-    local edge = Instance.new("UIStroke")
-    edge.Color = pad.Color
-    edge.Thickness = 2
-    edge.Parent = plate
+    plate.BackgroundTransparency = 1
+    plate.Image = SIGN_PATCH
+    plate.ImageColor3 = Color3.fromRGB(11, 12, 14)
+    plate.ImageTransparency = 0.12
     plate.Parent = billboard
+    local mark = Instance.new("ImageLabel")
+    mark.Name = "Mark"
+    mark.AnchorPoint = Vector2.new(0.5, 1)
+    mark.Position = UDim2.new(0.5, 0, 1, -4)
+    mark.Size = UDim2.fromOffset(110, 18)
+    mark.BackgroundTransparency = 1
+    mark.Image = SIGN_MARK
+    mark.ImageColor3 = pad.Color
+    mark.Parent = plate
 
     label.Parent = plate
-    label.Position = UDim2.fromOffset(10, 6)
-    label.Size = UDim2.new(1, -20, 1, -12)
+    label.Position = UDim2.fromOffset(14, 6)
+    label.Size = UDim2.new(1, -28, 1, -26)
     label.FontFace = SIGN_FONT
-    label.TextColor3 = Color3.fromRGB(230, 232, 227)
+    label.TextColor3 = Color3.fromRGB(240, 239, 233)
     label.TextStrokeTransparency = 1
-    local ink = Instance.new("UIStroke")
-    ink.Color = Color3.fromRGB(11, 14, 19)
-    ink.Thickness = 1.5
-    ink.Parent = label
 end
 
 -- Soft glow and rising sparkles in the pad's color (the pad is a cylinder lying on its side, so +X is up).

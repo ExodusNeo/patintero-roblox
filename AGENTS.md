@@ -43,14 +43,20 @@ rollable **Styles** (rarity-weighted, each with a passive + two skills) in the s
   from Studio, in its own `PatinteroAnim` scene), then `style_anims.py` → `build_actions()` (one action
   per animation, saved in `assets/blender/StyleAnimations.blend`) and `export_luau(...)` to regenerate
   `src/shared/Modules/StyleAnimations.luau`. `preview.py` → `sheet([(name, keyIndex), ...])` lines up
-  posed rig copies for one-render pose checks. Push the regenerated module into Studio (it is generated:
-  never hand-edit it).
+  posed rig copies for one-render pose checks (the rig faces +Y; view it from the front). Push the
+  regenerated module into Studio (it is generated: never hand-edit it).
+  Grounded poses use `stance(drop, r=(fwd, out), l=(fwd, out), px, pz)` / `leg(side, drop, fwd, out)`: an exact
+  2-bone IK that keeps the feet flat and planted while the root drops or shifts. Use them for any pose with
+  feet on the ground, otherwise the feet sink or float.
 - **Effect sprites** come from `tools/blender/fx_textures.py` (white-on-transparent PNGs in `assets/fx/`),
   uploaded with the Studio MCP `upload_image` tool (serve `assets/fx` on localhost); the ids live in
   `SkillEffects.TEX`. Re-upload and update the ids if a sprite changes.
-- **UI art** comes from `tools/blender/ui_assets.py` (`assets/ui/`): Eevee renders of the 7 embossed
-  skill-kind icons, plus numpy sprites (sunburst rays, glow, tileable asphalt grain). Uploaded the same way;
-  ids live in `UIKit.Image` / `UIKit.Icon` (the shockwave ring reuses the `fx_ring` effect sprite).
+- **UI art ("Kanto Night")** is the hand-drawn art of the Figma file "Patintero UI" (Direction B): chalk
+  strokes, key boxes, torn patches, paint plates, the streetlamp light. The Figma SVGs live in
+  `assets/ui/kanto/src/`; `python tools/ui_kanto.py` turns them into white, tintable PNGs in `assets/ui/kanto/`
+  (headless Chrome). Uploaded the same way; ids live in `UIKit.Art` (the pad signs in `HubService` reuse the
+  Patch / TeamMark ids). The skill-kind icons and the glow still come from `tools/blender/ui_assets.py`
+  (`UIKit.Icon` / `UIKit.Image`; the shockwave ring reuses the `fx_ring` effect sprite).
 - Disk → Studio for generated/new files: serve `src/` on localhost and `HttpService:GetAsync` each file
   into its ModuleScript from an Edit-mode `execute_luau` (HttpEnabled on briefly, then restored).
 
@@ -132,22 +138,25 @@ only new systems. If several rows match, load all of them. If none match, say so
   never loads stale spins; the `Teleporting` player attribute blocks spins/queueing meanwhile.
 
 ### Styles menu (hub; G / gamepad B to close, or the top-left STYLES button) — `SpinController`
-- A slate board (laid out at 860x500, scaled to fit any screen) with an accent line across the top in the
-  shown style's rarity color, over a dimmed backdrop; the world behind is blurred (`UIKit.blur`).
-  Opening snaps it in and fills the odds bars one tier at a time.
-- Left: dark showcase of the player's own avatar on a podium (ViewportFrame + WorldModel, scripts
-  stripped) looping the style's dance (`<id>_Pose`) over faint, slow rays in the rarity color.
-- Right: style name in the condensed scoreboard face (Epic/Legendary get a cold light passing through
-  it), a filled rarity tag + outlined EQUIPPED tag, description, Q/E skill cards (rarity accent bar,
-  skill-kind icon, inset key cap), SPEED / STAMINA / REACH readouts, the roll **odds** per tier as thin bars
-  (from `Config.Styles.RarityWeights`) with every style in each tier, and the signal-red SPIN button with
-  the spin count inset.
-- Spin: names shuffle and tick (the accent line flickers through rarities) while the rays speed up;
-  Epic/Legendary get a beat of shake first. The reveal lands with a shockwave ring behind the avatar, a
-  flash, a snap of the name/rarity tag and the accent line sweeping across; Legendary adds a second white
-  ring, a board shake and a blur pulse. The result (name, EQUIPPED tag, skill bar) stays hidden until the
-  reveal even though the server sets `Style` instantly. The skill bar is hidden while the menu is open.
-  The STYLES button (own ScreenGui, safe area) shows the spin count, which snaps when spins are earned.
+- A full-screen night scene laid out on the Figma mockup's 1366x768 and scaled into the core-UI safe
+  area; the world behind is blurred (`UIKit.blur`) under a near-black backdrop. Opening snaps it in and
+  draws the chalk underline under the name.
+- Right: the player's own avatar (ViewportFrame + WorldModel, scripts stripped, lit warm from above) under a
+  sodium streetlamp: lamp glow, light cone, light pool and a ground shadow. It loops the style's showcase
+  idle (`<id>_Pose`); the preview camera frames the avatar from its bounding box (tall hats and weapons
+  included) with headroom, feet on the light pool.
+- Left: rarity (in its color) + "equipped", the style name huge in Sarpanch with a chalk underline that fits
+  the name (Epic/Legendary get a cold light passing through it), description, Q/E rows (chalk key box with
+  the amber key, skill-kind icon, name, cooldown), Speed / Stamina / Reach numbers, a chalk divider, the
+  roll **odds** per tier in two columns (from `Config.Styles.RarityWeights`) with every style in each tier,
+  and SPIN on an amber paint plate with "N left" (greyed paint at 0 spins).
+- Spin: names shuffle and tick while the streetlamp flickers; Epic/Legendary get a beat of darkness (the
+  lamp cuts out) and a shake first. The reveal lands with the lamp flaring in the rarity color, a shockwave
+  ring behind the avatar, a flash, a snap of the name/rarity and the underline redrawn; Legendary adds a
+  second white ring, a shake and a blur pulse. The result (name, "equipped", skill bar) stays hidden until
+  the reveal even though the server sets `Style` instantly. The skill bar and STYLES button are hidden while
+  the menu is open. The STYLES button (torn patch, own ScreenGui in the safe area) shows the spin count in
+  amber, which snaps when spins are earned.
 
 ### Match (first person) — Core loop (Patintero)
 - The match server waits for the party the hub sent (`expectedPlayers` teleport data) and until no
@@ -199,7 +208,7 @@ only new systems. If several rows match, load all of them. If none match, say so
 - Rarities: Common 55%, Rare 30%, Epic 12%, Legendary 3% (see `Config.Styles`).
 - Spins: start with 10; +1 per round played, +1 per Tubig. Saved in DataStore with the Style.
 - Each Style = passive stat modifiers (speed, stamina, reach) + **Q** and **E** skills, each with its own
-  custom animation and effects, plus a looping showcase dance (see *Style animations & effects*).
+  custom animation and effects, plus a looping showcase idle (see *Style animations & effects*).
 - Skill kinds: `Dash`, `Blink`, `Haste`, `SecondWind`, `LongArm`, `Slow` (area, enemies only;
   `mult = 0` is a freeze), `Veil` (tag-immune + see-through). Roster lives in `Styles.luau`.
 
@@ -214,29 +223,40 @@ only new systems. If several rows match, load all of them. If none match, say so
   `CanTouch = false`, non-solid decor gets `CanQuery = false` (flags/wires never block tag line of sight
   or Blink raycasts), parts under 1.5 studs get `CastShadow = false`. Run it after adding map pieces by hand.
 - Hub queue pads glow (a `PointLight` in the pad color) and emit rising sparkles (`HubService.decoratePad`).
-  Their signs are dressed at start (`HubService.dressSign`): slate plate, pad-colored edge, scoreboard lettering.
+  Their signs are dressed at start (`HubService.dressSign`): torn dark patch, a chalk mark in the pad color,
+  Sarpanch lettering.
 
 ### Style animations & effects (client) — `StyleAnimator`, `SkillEffects`, data in `StyleAnimations`
-- 24 Blender-made animations: `<styleId>_Q`, `<styleId>_E` (one-shots) and `<styleId>_Pose` (looping
-  showcase dance in the Styles menu). `StyleAnimator.Play(character, name)` / `Stop` overrides joint
-  `Transform`s right after the Animator (`PreSimulation`), blending in/out (0.08 s / 0.15 s) over the
+- 32 Blender-made animations: `<styleId>_Q`, `<styleId>_E` (one-shots), `<styleId>_Pose` (looping showcase
+  idle in the Styles menu) and `<styleId>_Beat` (the idle's signature move). `StyleAnimator.Play(character, name)` / `Stop` overrides joint
+  `Transform`s right after the Animator (`PreSimulation`), blending in/out (0.14 s / 0.15 s) over the
   current animation; joints no Animator drives blend from rest. Works on Motor6D and AnimationConstraint
   rigs and on the ViewportFrame preview. **Nothing is uploaded**: the caster plays its own cast instantly,
   every other client plays it on `SkillCast` (Studio-registered temp animation ids don't work live, so
   real Animation assets would otherwise have to be uploaded by hand).
-- Dances: Tsinelas *Tinikling* hops (hands on hips), Kanto *Budots*, Bantay guard shuffle, Sipa juggling
-  kicks, Tumbang *tumbang preso* slipper throw, Habagat flowing wind arms, Anino low shadow seal,
-  Bathala levitation.
-- Skills: Tsinelas Dash (anime sprint) / Takbo! (set + fist pump); Kanto shoulder charge / Second Wind
-  (big breath); Bantay fencing Lunge / Long Arm (arms snap wide); Sipa hop-kick / knee juggles; Tumbang
-  diving reach / Lata Shock (overhead can slam); Habagat Gale Step (full spin) / Monsoon (gather, rise,
-  slam); Anino shadow run / Shadow Veil (cloaked crouch); Bathala Divine Step (rise, arms to the sky) /
-  Divine Halt (palm out, other arm raised).
+- Showcase idles are fighting-game character-select stances: feet planted, slow breathing and weight
+  shift, eyes on the camera (no hops, dances or levitation). `_Pose` is the constant breathing/bob loop;
+  `StyleAnimator` blends the `_Beat` (signature move, starts and ends on the idle's rest stance) in over it
+  1.5 s after the idle starts, then every 5–9 s (random).
+  Tsinelas: ready on the balls of the feet, light bounce, glance down the line; Kanto: arms crossed,
+  weight back, chin up, a slow "come on" tilt; Bantay: low wide guard, eyes track then snap to a runner;
+  Sipa: bladed guard, rocking weight, a sharp knee check; Tumbang: lead arm sighting, throwing arm cocked,
+  a pump fake; Habagat: centered, palms rise to the chest and press down; Anino: low crouch, hand on the
+  asphalt, a sharp head tilt; Bathala: tall and still, an open palm slowly rises to halt the camera.
+- Skills: anticipation → snap → short hold → settle, low and heavy, no celebrating. Tsinelas sprinter's
+  drive / Takbo! (set, explosive first drive); Kanto shoulder charge / Second Wind (hands on knees, one
+  deep breath); Bantay fencing Lunge / Long Arm (arms snap wide); Sipa scissor hop-kick / Takbo! (three knee
+  strikes); Tumbang diving reach / Lata Shock (cocked arm whips through); Habagat Gale Step (tight pivot
+  spin) / Monsoon (gather, rise, drive into the ground); Anino low shadow run / Shadow Veil (cloaked
+  crouch); Bathala Divine Step (onto the toes, one arm sweeps out) / Divine Halt (one palm thrust).
+  Everything plays `TEMPO` (1.15) times slower than authored, for a measured, unhurried pace; strikes ease
+  in with Cubic Out. Impact beats match `SkillEffects`' delays (noted per skill in `style_anims.py`, written
+  in authored time and stretched by `SkillEffects`' own `TEMPO`); change both together.
 - `SkillEffects.Play(styleId, slot, skill, casterCharacter, position)`, effect per `<styleId>_<slot>`, colored
   by the style's `THEME`: dust, speed lines, trails, ground rings (flat particle sprites), slash crescent,
   glowing hands, star/leaf/feather bursts, afterimages, a thrown tin can + shock ring (Lata Shock), rain
   over the Monsoon radius, smoke bomb + wisps (Shadow Veil), light pillars and a spreading clock rune
-  (Bathala). Impact moments are delayed to match the animation (e.g. Lata Shock lands at ~0.32 s).
+  (Bathala). Impact moments are delayed to match the animation (e.g. Lata Shock lands at ~0.37 s).
 
 ### Presentation (client) — audio, VFX, HUD
 - **Audio** (`SoundController`, classic `Sound` + SoundGroups Master → SFX / UI / Ambience / Music; all ids
@@ -254,23 +274,27 @@ only new systems. If several rows match, load all of them. If none match, say so
   only while the swipe plays.
 - **Tags** (`CourtVFXController`): the tagged Passer flashes red for everyone else; the tagger sees a red
   hit-marker ring pop around the crosshair (`HUDController`).
-- **HUD** (`HUDController`): a slate broadcast scoreboard with team-tinted Red/Blue score blocks (an amber
-  underline marks your side; scores roll up and snap), the phase line and a big scoreboard clock (snaps each
-  countdown second; signal red in a round's last 10 s), and the role tag under it (accent bar in the role
-  color). Thin stamina bar (green → amber → red, flickers under 25%). Event banners are broadcast strips
-  (slate band fading out at both ends, accent line in the event color, text in caps) that slide in, hold,
-  slide on and fade; Tubig and the winner get faint rays behind. A newer strip cancels an older one's fade.
-- **Skill bar** (`StyleController`, both places): style name + rarity (in its color), two slate cards with
-  the skill-kind icon, a 1 px edge tinted toward the rarity and an inset key cap; cooldown shades the
-  card from the top with a big countdown; the card dips on cast and, when ready again, snaps while its
-  edge flashes the rarity color.
-- **UIKit** (`Controllers/UIKit`) is the shared "night court" look: chalk lines on night asphalt, read like a
-  sports broadcast. Tokens: Night / Deep / Slab / Steel slates, Chalk and Dim text, Signal red (main action,
-  urgency), Amber (yours); color is otherwise reserved for meaning (rarity, team, role). Fonts: Oswald
-  (condensed scoreboard face) for titles and numbers, Builder Sans for body. Motion is crisp, no overshoot
-  (Quick / Snap / Slide / Fade). Builders: `panel` (small radius, 1 px steel edge, asphalt grain, optional
-  accent bar), `button` (hover nudge, press dip, release snap + click), `pop`, `shimmer` (faint), `spin`,
-  `countTo`, `shake`, `shockwave`, `blur` (menu blur, optional pulse), `fitScreen` (scale with screen height,
-  0.6–1.3). A GuiObject takes only one UIScale, so `fitScreen` goes on a container and `button`/`pop` on
-  the element inside. Loops, shakes and blur pulses are skipped when the player's Reduced Motion is on.
+- **HUD** (`HUDController`, laid out like the mockup): faint dark scrims at the top and bottom of the screen; a
+  torn scoreboard patch with the Red/Blue scores (roll up and snap) over chalk marks in the team colors, an
+  amber scribble under your side, the clock (snaps each countdown second; signal red in a round's last
+  10 s) and a chalk tick per round; under it the role line ("Runner reach the safehouse", role word in the
+  role color). Crosshair dot; stamina is a chalk stroke drawn over a faint one (chalk → amber below half →
+  red, flickering under 25%). Event callouts are paint plates that brush on left to right with the word
+  slammed on top and an optional line under it ("TUBIG!" / "Neo scored +5"; zones show their short name);
+  Tubig and the winner shake. Light paint gets ink lettering, dark paint chalk. A newer callout takes over.
+- **Skill bar** (`StyleController`, both places): style name in its rarity color over two slots (torn patch,
+  chalk edge, white skill-kind icon, amber key letter). Cooling down dims the icon under a big countdown;
+  the slot dips on cast and, when ready again, snaps while its chalk edge flashes the rarity color.
+- **UIKit** (`Controllers/UIKit`) is the shared "Kanto Night" look (Figma "Patintero UI", Direction B): a
+  barangay court under a sodium streetlamp. Tokens: Ink / Patch darks, Chalk and Dim text, Sodium amber (the
+  main action and what is yours), Signal red (urgency); color is otherwise reserved for meaning (rarity,
+  team, role). Fonts: Sarpanch (Black for names/scores/callouts, ExtraBold for numbers and keys), Titillium
+  Web for text. `UIKit.text` takes the mockup's font size and multiplies it by `UIKit.EM` (1.4: Roblox's
+  TextSize is the line height); text past Roblox's 100 cap (style name, callouts) sits in a holder scaled
+  up with UIScale. Art: `UIKit.Art` (chalk/paint/patch/lamp shapes, white, tinted with ImageColor3) via
+  `art`; `wipe` draws a clipped stroke in left to right. Motion is crisp, no overshoot (Quick / Snap / Slide /
+  Fade). Builders: `button` (hover nudge, press dip, release snap + click), `pop`, `countTo`, `shake`,
+  `shockwave`, `blur` (menu blur, optional pulse), `fitScreen` (scale with screen height against the
+  mockup's 768, 0.6–1.5). A GuiObject takes only one UIScale, so `fitScreen` goes on a container and
+  `button`/`pop` on the element inside. Shakes, wipes and blur pulses are skipped when Reduced Motion is on.
 - `CourtGeometry` builds the line and zone definitions once (frozen tables) instead of on every call.

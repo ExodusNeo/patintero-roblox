@@ -1,12 +1,13 @@
 --!strict
 --[[
     UIKit.luau
-    The "night court" look every screen shares: chalk lines on dark asphalt, read like a sports broadcast.
-    Color and type tokens, the Blender-made images (tools/blender/ui_assets.py), one crisp motion
-    vocabulary, and builders for the recurring pieces — steel-edged panels with an accent bar, buttons,
-    snaps, sheen, spinning rays, count-ups, shakes, shockwave rings and the menu blur.
-    Color is reserved for meaning (rarity, team, role, urgency); everything else is slate and chalk.
-    Respects the player's Reduced Motion setting (loops, shakes and blur pulses are skipped).
+    The "Kanto Night" look every screen shares: a barangay court under a sodium streetlamp at night.
+    Chalk strokes and torn dark patches on the asphalt, brushed amber paint for the main action and big
+    callouts, Sarpanch for names and numbers, Titillium Web for everything else (Figma "Patintero UI",
+    Direction B; the hand-drawn shapes are made by tools/ui_kanto.py).
+    Color is reserved for meaning (rarity, team, role, urgency); sodium amber marks the main action and
+    what is yours. One crisp motion vocabulary, no overshoot.
+    Respects the player's Reduced Motion setting (shakes, wipes and blur pulses are skipped).
 ]]
 
 local TweenService = game:GetService("TweenService")
@@ -19,31 +20,47 @@ local SoundController = require(script.Parent.SoundController)
 local UIKit = {}
 
 UIKit.Color = table.freeze({
-    Night = Color3.fromRGB(19, 24, 32), -- panel base: night asphalt
-    Deep = Color3.fromRGB(11, 14, 19), -- insets, tracks
-    Slab = Color3.fromRGB(28, 35, 48), -- cards
-    Steel = Color3.fromRGB(54, 65, 82), -- 1 px edges
-    Chalk = Color3.fromRGB(230, 232, 227), -- text, like the court's chalk lines
-    Dim = Color3.fromRGB(135, 144, 160), -- secondary text
-    Signal = Color3.fromRGB(217, 54, 62), -- the main action and urgency
-    SignalDark = Color3.fromRGB(120, 28, 34),
-    Amber = Color3.fromRGB(233, 162, 59), -- marks what is yours
+    Ink = Color3.fromRGB(14, 15, 18), -- night: backdrops, text on paint
+    Patch = Color3.fromRGB(11, 12, 14), -- torn patches under HUD pieces
+    Chalk = Color3.fromRGB(240, 239, 233), -- text and chalk strokes
+    Dim = Color3.fromRGB(138, 143, 153), -- secondary text
+    Sodium = Color3.fromRGB(242, 163, 58), -- streetlamp amber: the main action and what is yours
+    Signal = Color3.fromRGB(210, 69, 63), -- urgency: last seconds, tagged
     White = Color3.new(1, 1, 1),
 })
 
-local OSWALD = "rbxasset://fonts/families/Oswald.json"
-local BUILDER = "rbxasset://fonts/families/BuilderSans.json"
+local SARPANCH = "rbxasset://fonts/families/Sarpanch.json"
+local TITILLIUM = "rbxasset://fonts/families/TitilliumWeb.json"
 UIKit.Font = table.freeze({
-    Display = Font.new(OSWALD, Enum.FontWeight.Bold), -- condensed scoreboard face: titles, numbers
-    Label = Font.new(OSWALD, Enum.FontWeight.Medium), -- small uppercase labels
-    Body = Font.new(BUILDER, Enum.FontWeight.Medium),
-    Bold = Font.new(BUILDER, Enum.FontWeight.Bold),
+    Display = Font.new(SARPANCH, Enum.FontWeight.Heavy), -- names, scores, callouts
+    Number = Font.new(SARPANCH, Enum.FontWeight.ExtraBold), -- clock, stats, odds, key letters
+    Body = Font.new(TITILLIUM, Enum.FontWeight.Regular),
+    Semi = Font.new(TITILLIUM, Enum.FontWeight.SemiBold),
+    Bold = Font.new(TITILLIUM, Enum.FontWeight.Bold),
+})
+
+-- Hand-drawn shapes from the Figma mockup, all white so ImageColor3 tints them (tools/ui_kanto.py)
+UIKit.Art = table.freeze({
+    Patch = "rbxassetid://104932187263089", -- torn dark patch (scoreboard, buttons)
+    SlotPatch = "rbxassetid://83786577683272", -- square patch under a skill slot
+    SlotEdge = "rbxassetid://118164769852155", -- chalk square around a skill slot
+    KeyBox = "rbxassetid://84175775865031", -- chalk square around a key letter
+    Underline = "rbxassetid://100900496608958", -- heavy chalk underline (style name)
+    Divider = "rbxassetid://80328492052347",
+    Stroke = "rbxassetid://119099865602860", -- double chalk stroke (stamina)
+    Paint = "rbxassetid://129666207123068", -- brushed paint plate (SPIN)
+    Callout = "rbxassetid://82451337390345", -- wide paint plate (event callouts)
+    TeamMark = "rbxassetid://123140937052663", -- chalk underline under a team's score
+    YourSide = "rbxassetid://86199617049508", -- amber scribble under your side
+    Tick = "rbxassetid://121727782111665", -- round tick
+    Lamp = "rbxassetid://94112457561331", -- streetlamp glow, its light cone, pool and the shadow below
+    Cone = "rbxassetid://92906161084480",
+    Pool = "rbxassetid://125103351430007",
+    Shadow = "rbxassetid://84425250187625",
 })
 
 UIKit.Image = table.freeze({
-    Rays = "rbxassetid://131045294298750",
     Glow = "rbxassetid://126764346582106",
-    Grain = "rbxassetid://109853492875949", -- tileable asphalt grain, 256 px
     Ring = "rbxassetid://75433959061612", -- soft ring (shared with SkillEffects)
 })
 
@@ -99,7 +116,11 @@ function UIKit.stroke(gui: GuiObject, color: Color3, thickness: number, transpar
     }, gui)
 end
 
--- Text label with the house defaults
+-- Roblox's TextSize is the line height, Figma's font size the em; both house fonts set a line at ~1.4 em.
+-- Mockup font sizes times this land at the mockup's glyph size (Roblox caps TextSize at 100).
+UIKit.EM = 1.4
+
+-- Text label with the house defaults. TextSize is given as the mockup's font size.
 function UIKit.text(props: { [string]: any }, parent: Instance?): TextLabel
     local label = make("TextLabel", {
         BackgroundTransparency = 1,
@@ -110,46 +131,35 @@ function UIKit.text(props: { [string]: any }, parent: Instance?): TextLabel
     for key, value in props do
         (label :: any)[key] = value
     end
+    label.TextSize = math.min(math.round(label.TextSize * UIKit.EM), 100)
     label.Parent = parent
     return label
 end
 
--- Subtle vertical light falloff so flat slabs read as surfaces
-function UIKit.wash(gui: GuiObject, bottom: number?)
-    local b = bottom or 0.7
-    make("UIGradient", { Rotation = 90, Color = ColorSequence.new(Color3.new(1, 1, 1), Color3.new(b, b, b)) }, gui)
+-- One of the hand-drawn shapes (UIKit.Art), filling its parent unless props say otherwise
+function UIKit.art(image: string, props: { [string]: any }, parent: Instance?): ImageLabel
+    local label = make("ImageLabel", {
+        BackgroundTransparency = 1,
+        Size = UDim2.fromScale(1, 1),
+        Image = image,
+        Active = false,
+    }, nil)
+    for key, value in props do
+        (label :: any)[key] = value
+    end
+    label.Parent = parent
+    return label
 end
 
--- Steel-edged panel: small radius, 1 px edge, asphalt grain, and an accent bar on one side whose
--- color carries meaning (rarity, team, role). Returns the accent bar and the edge stroke.
-function UIKit.panel(frame: GuiObject, accent: Color3?, side: ("Top" | "Left")?, radius: number?): (Frame?, UIStroke)
-    UIKit.corner(frame, radius or 4)
-    local edge = UIKit.stroke(frame, UIKit.Color.Steel, 1, 0.1)
-    edge.ApplyStrokeMode = Enum.ApplyStrokeMode.Border -- panels can be (blank) buttons; edge the box, not the text
-    make("ImageLabel", {
-        Name = "Grain",
-        Size = UDim2.fromScale(1, 1),
-        BackgroundTransparency = 1,
-        Image = UIKit.Image.Grain,
-        ImageTransparency = 0.9,
-        ScaleType = Enum.ScaleType.Tile,
-        TileSize = UDim2.fromOffset(128, 128),
-        ZIndex = 0,
-        Active = false,
-    }, frame)
-    if not accent then
-        return nil, edge
+-- Draws `clip`'s contents in left to right, like a chalk or paint stroke (contents need Offset sizes)
+function UIKit.wipe(clip: GuiObject, full: UDim2, info: TweenInfo?)
+    clip.ClipsDescendants = true
+    if UIKit.reducedMotion() then
+        clip.Size = full
+        return
     end
-    local left = side == "Left"
-    local bar: Frame = make("Frame", {
-        Name = "Accent",
-        Size = if left then UDim2.new(0, 3, 1, -8) else UDim2.new(1, -8, 0, 2),
-        Position = if left then UDim2.fromOffset(0, 4) else UDim2.fromOffset(4, 0),
-        BackgroundColor3 = accent,
-        BorderSizePixel = 0,
-        ZIndex = 20,
-    }, frame)
-    return bar, edge
+    clip.Size = UDim2.new(0, 0, full.Y.Scale, full.Y.Offset)
+    TweenService:Create(clip, info or UIKit.Motion.Slide, { Size = full }):Play()
 end
 
 -- Hover nudges up, press dips, release snaps back with a click. Mouse, touch and gamepad selection.
@@ -193,50 +203,6 @@ function UIKit.pop(gui: GuiObject, amount: number?)
     local s = scale :: UIScale
     s.Scale = amount or 1.12
     TweenService:Create(s, UIKit.Motion.Snap, { Scale = 1 }):Play()
-end
-
--- Faint diagonal sheen sweeping across `gui` every `pause` seconds. Returns the sheen frame.
-function UIKit.shimmer(gui: GuiObject, pause: number?): Frame
-    local sheen: Frame = make("Frame", {
-        Name = "Sheen",
-        Size = UDim2.fromScale(1, 1),
-        BackgroundColor3 = UIKit.Color.White,
-        BorderSizePixel = 0,
-        ZIndex = 15,
-        Active = false,
-    }, gui)
-    local corner = gui:FindFirstChildOfClass("UICorner")
-    if corner then
-        corner:Clone().Parent = sheen
-    end
-    local gradient: UIGradient = make("UIGradient", {
-        Rotation = 20,
-        Offset = Vector2.new(-1.2, 0),
-        Transparency = NumberSequence.new({
-            NumberSequenceKeypoint.new(0, 1),
-            NumberSequenceKeypoint.new(0.44, 1),
-            NumberSequenceKeypoint.new(0.5, 0.82),
-            NumberSequenceKeypoint.new(0.56, 1),
-            NumberSequenceKeypoint.new(1, 1),
-        }),
-    }, sheen)
-    if UIKit.reducedMotion() then
-        sheen.Visible = false
-    else
-        TweenService:Create(gradient, TweenInfo.new(0.9, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut, -1, false, pause or 3),
-            { Offset = Vector2.new(1.2, 0) }):Play()
-    end
-    return sheen
-end
-
--- Endless rotation (rays). Returns the tween so callers can swap speeds.
-function UIKit.spin(gui: GuiObject, seconds: number): Tween?
-    if UIKit.reducedMotion() then return nil end
-    gui.Rotation = gui.Rotation % 360
-    local tween = TweenService:Create(gui, TweenInfo.new(seconds, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut, -1),
-        { Rotation = gui.Rotation + 360 })
-    tween:Play()
-    return tween
 end
 
 -- Rolls a number label up (or down) to `target` instead of snapping.
@@ -303,11 +269,12 @@ function UIKit.blur(on: boolean, pulse: boolean?)
     TweenService:Create(effect, UIKit.Motion.Slide, { Size = target }):Play()
 end
 
--- Every HUD block scales with screen height so it fits phones and stays crisp on big monitors.
+-- HUD blocks are laid out at the mockup's 1366x768 and scale with screen height, so they keep the
+-- mockup's proportions on phones and big monitors.
 local fitted: { UIScale } = {}
 local function screenScale(): number
     local camera = Workspace.CurrentCamera
-    return if camera then math.clamp(camera.ViewportSize.Y / 900, 0.6, 1.3) else 1
+    return if camera then math.clamp(camera.ViewportSize.Y / 768, 0.6, 1.5) else 1
 end
 
 function UIKit.fitScreen(root: GuiObject): UIScale
