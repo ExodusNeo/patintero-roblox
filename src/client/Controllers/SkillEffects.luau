@@ -49,6 +49,9 @@ local THEME: { [string]: Color3 } = {
 local DUST = Color3.fromRGB(200, 178, 145)
 local SHADOW = Color3.fromRGB(30, 12, 45)
 local LEAF_GREEN = Color3.fromRGB(110, 200, 90)
+-- The style animations play TEMPO times slower than authored (tools/blender/style_anims.py); delays that
+-- land on an animation beat are written in authored time and stretched by it. Change both together.
+local TEMPO = 1.15
 
 type Cast = {
     character: Model?,
@@ -375,7 +378,7 @@ local FX: { [string]: (Cast) -> () } = {
     end,
     Tsinelas_E = function(c) -- Takbo!: wind ring, sparks at the fist pump, speed lines while hasted
         groundDecal(c.ground, 7, WHITE, TEX.Ring, 0.45)
-        task.delay(0.22, starBurst, c.position + Vector3.new(0, 2.5, 0), c.color, 8)
+        task.delay(0.22 * TEMPO, starBurst, c.position + Vector3.new(0, 2.5, 0), c.color, 8)
         if c.root then
             speedLines(c.root, c.skill.duration or 2.5, c.color)
             trail(c.root, c.color, c.skill.duration or 2.5)
@@ -387,7 +390,7 @@ local FX: { [string]: (Cast) -> () } = {
         if c.root then
             trail(c.root, c.color, 0.3)
             local root = c.root
-            task.delay(0.1, function()
+            task.delay(0.1 * TEMPO, function()
                 burst(root.Position + root.CFrame.LookVector * 2.5, 10, {
                     Texture = TEX.Smoke,
                     Color = ColorSequence.new(c.color, WHITE),
@@ -434,14 +437,14 @@ local FX: { [string]: (Cast) -> () } = {
         if c.root then
             trail(c.root, c.color, 0.3)
             local root = c.root
-            task.delay(0.08, function()
+            task.delay(0.08 * TEMPO, function()
                 slash(root.Position + root.CFrame.LookVector * 3.5 + Vector3.new(0, 0.6, 0), c.color, 7)
             end)
         end
         dust(c.ground, DUST, 8)
     end,
     Bantay_E = function(c) -- Long Arm: glowing hands for the whole buff, ring as the arms snap open
-        task.delay(0.36, groundDecal, c.ground, 6, c.color, TEX.Ring, 0.5)
+        task.delay(0.36 * TEMPO, groundDecal, c.ground, 6, c.color, TEX.Ring, 0.5)
         local duration = c.skill.duration or 3
         for _, name in { "RightHand", "LeftHand" } do
             local part = hand(c.character, name)
@@ -490,7 +493,7 @@ local FX: { [string]: (Cast) -> () } = {
     Sipa_E = function(c) -- Takbo!: wind swirling around the legs, puffs at each knee kick
         local duration = c.skill.duration or 2.5
         for _, at in { 0.1, 0.28, 0.46 } do
-            task.delay(at, dust, c.ground, c.color, 4)
+            task.delay(at * TEMPO, dust, c.ground, c.color, 4)
         end
         if c.root then
             trail(c.root, c.color, duration)
@@ -548,9 +551,9 @@ local FX: { [string]: (Cast) -> () } = {
             flashLight(landAt + Vector3.new(0, 2, 0), c.color, 20, 0.4)
             SoundController.PlaySpatialSFX("TagSlap", landAt, Vector2.new(1.6, 1.8))
         end
-        task.delay(0.1, function()
+        task.delay(0.1 * TEMPO, function()
             local from = if thrower then thrower.Position else c.position + Vector3.new(0, 3, 0)
-            throwCan(from, landAt + Vector3.new(0, 0.4, 0), 0.22, impact)
+            throwCan(from, landAt + Vector3.new(0, 0.4, 0), 0.22 * TEMPO, impact)
         end)
     end,
 
@@ -573,7 +576,7 @@ local FX: { [string]: (Cast) -> () } = {
     end,
     Habagat_E = function(c) -- Monsoon: leaves blast out, the ring sweeps the radius, rain falls over it
         local radius = c.skill.radius or 20
-        task.delay(0.42, function()
+        task.delay(0.42 * TEMPO, function()
             groundDecal(c.ground, radius, c.color, TEX.Ring, 0.7)
             groundDecal(c.ground, radius * 0.7, WHITE, TEX.Wind, 0.8, 200)
             leafBurst(c.ground + Vector3.new(0, 1, 0), 40, 26)
@@ -642,7 +645,7 @@ local FX: { [string]: (Cast) -> () } = {
     end,
     Bathala_E = function(c) -- Divine Halt: a clock rune spreads over the radius as time stops
         local radius = c.skill.radius or 18
-        task.delay(0.33, function()
+        task.delay(0.33 * TEMPO, function()
             groundDecal(c.ground, radius, c.color, TEX.Rune, 1.1, 40)
             groundDecal(c.ground, radius * 0.55, WHITE, TEX.Rune, 0.9, -70)
             groundDecal(c.ground, radius, WHITE, TEX.Ring, 0.5)

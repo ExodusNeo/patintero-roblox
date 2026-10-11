@@ -15,8 +15,9 @@ local StyleAnimations = require(ReplicatedStorage.Shared.Modules.StyleAnimations
 
 local StyleAnimator = {}
 
-local FADE_IN = 0.08
+local FADE_IN = 0.14 -- eases into a skill instead of snapping straight to its first pose
 local FADE_OUT = 0.15
+local REST_MIN, REST_MAX = 5, 9 -- seconds a looped idle holds its resting pose between plays (random)
 
 type Clip = {
     length: number,
@@ -27,7 +28,7 @@ type Clip = {
     directions: { Enum.EasingDirection },
     frames: { { CFrame } },
 }
-type Playback = { clip: Clip, joints: { [number]: Instance }, started: number, fadeOutAt: number? }
+type Playback = { clip: Clip, joints: { [number]: Instance }, started: number, cycleAt: number, rest: number, fadeOutAt: number? }
 
 local clips: { [string]: Clip } = {}
 local playing: { [Model]: Playback } = {}
@@ -57,6 +58,10 @@ local function getClip(name: string): Clip?
     end
     clips[name] = clip
     return clip
+end
+
+local function restTime(): number
+    return REST_MIN + math.random() * (REST_MAX - REST_MIN)
 end
 
 local function findJoints(character: Model, names: { string }): { [number]: Instance }
@@ -101,7 +106,15 @@ local function step()
 
         -- Segment [k - 1, k] containing t, eased with the target key's easing
         local times = clip.times
-        local t = if clip.looped then elapsed % clip.length else elapsed
+        local t = elapsed
+        if clip.looped then
+            -- One play-through, then hold the end pose (a loop's last key is its first) for a random rest
+            if now - playback.cycleAt >= clip.length + playback.rest then
+                playback.cycleAt = now
+                playback.rest = restTime()
+            end
+            t = math.min(now - playback.cycleAt, clip.length)
+        end
         local k = #times
         for i = 2, #times do
             if t <= times[i] then
@@ -130,11 +143,12 @@ local function step()
 end
 
 -- Plays `name` (e.g. "Tsinelas_Q", "Bathala_Pose") on the character, replacing what it was playing.
--- Looped animations run until Stop. Returns false if there is no such animation.
+-- Looped animations (showcase idles) play, rest 5-9 s, play again, until Stop. Returns false if there is no such animation.
 function StyleAnimator.Play(character: Model, name: string): boolean
     local clip = getClip(name)
     if not clip then return false end
-    playing[character] = { clip = clip, joints = findJoints(character, clip.joints), started = os.clock(), fadeOutAt = nil }
+    local now = os.clock()
+    playing[character] = { clip = clip, joints = findJoints(character, clip.joints), started = now, cycleAt = now, rest = restTime(), fadeOutAt = nil }
     return true
 end
 
