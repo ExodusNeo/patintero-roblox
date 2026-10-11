@@ -89,6 +89,10 @@ local Config = {
         SkillCooldownSlack = 0.15, -- latency tolerance on server cooldown checks
     },
 
+    Avatar = {
+        Height = 5.5, -- studs, feet to top of head in the rest pose; every R15 character is scaled to this (default R15 ≈ 5.46)
+    },
+
     Data = {
         StoreName = "PatinteroPlayerData_v1",
         Retries = 3,

@@ -19,6 +19,7 @@ local DataService = require(ServerScriptService.Server.Systems.DataService)
 local StyleService = require(ServerScriptService.Server.Systems.StyleService)
 local TagService = require(ServerScriptService.Server.Systems.TagService)
 local MatchService = require(ServerScriptService.Server.Systems.MatchService)
+local AvatarService = require(ServerScriptService.Server.Systems.AvatarService)
 
 print(`[Server] Initializing Patintero Server Systems ({GameMode.Current})...`)
 
@@ -33,6 +34,7 @@ Remotes.Init()
 DataService.Init()
 StyleService.Init()
 TravelService.Init()
+AvatarService.Init()
 
 if GameMode.Current == "Match" then
     destroy("Hub")
