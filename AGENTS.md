@@ -103,7 +103,7 @@ only new systems. If several rows match, load all of them. If none match, say so
   Client-side prediction is fine for the caster's own movement (dash/blink); anything that
   affects other players or scoring is decided on the server.
 - Runtime state the client renders goes on attributes:
-  - Player: `Spins` (number), `Style` (style id), `Team`, `Teleporting`.
+  - Player: `Spins` (number), `Style` (style id), `Team` (current role), `Side` (`Red`/`Blue` match team), `Teleporting`.
   - Character: `HasteMult`, `SlowMult`, `ReachBonus`, `TagImmune` (timed, set by `StyleService`).
 - Clean up connections on character removal; use `UnreliableRemoteEvent` for cosmetics.
 - Commits: Conventional Commits (`feat(scope): …`, `fix(scope): …`), one per finished system.
@@ -141,7 +141,10 @@ only new systems. If several rows match, load all of them. If none match, say so
 - The match server waits for the party the hub sent (`expectedPlayers` teleport data) and until no
   one has joined for `Config.Match.JoinSettleTime` (max `ArrivalTimeout`), plays 2 rounds, then
   teleports everyone back to the hub. Players who arrive after teams are set spectate.
-- Two teams per match (assigned at match start); sides swap for round 2.
+- Two teams per match, **Red** and **Blue** (player attribute `Side`, assigned at match start): Red starts
+  as Passers, Blue as Guards, and they swap roles for round 2. Every point (zone advance, Tubig, tag) goes
+  to the scorer's side, so the match winner is a team of players: the HUD shows `RED: x | BLUE: y`
+  (your side underlined) and the match-over banner names the winning side (or a draw).
 - Guards are locked to chalk lines: `Line1`, `Line2`, `Line3` (across the court) and the
   `Patotot` (center line along the court). They tag with click / F. A lone guard gets the mid line
   (`Line2`); **line hop** (R / HOP) moves a guard to the next free line (`Config.Tagging.LineSwitchCooldown`).
