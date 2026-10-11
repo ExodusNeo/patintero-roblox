@@ -1,10 +1,12 @@
 --!strict
 --[[
     UIKit.luau
-    The "jeepney chrome" look every screen shares: color and type tokens, the Blender-made images
-    (tools/blender/ui_assets.py), one motion vocabulary, and builders for the recurring pieces —
-    chrome-rimmed plates, juicy buttons, pops, shimmer sweeps, spinning rays, count-ups, confetti.
-    Respects the player's Reduced Motion setting (loops, shakes and confetti are skipped).
+    The "night court" look every screen shares: chalk lines on dark asphalt, read like a sports broadcast.
+    Color and type tokens, the Blender-made images (tools/blender/ui_assets.py), one crisp motion
+    vocabulary, and builders for the recurring pieces — steel-edged panels with an accent bar, buttons,
+    snaps, sheen, spinning rays, count-ups, shakes, shockwave rings and the menu blur.
+    Color is reserved for meaning (rarity, team, role, urgency); everything else is slate and chalk.
+    Respects the player's Reduced Motion setting (loops, shakes and blur pulses are skipped).
 ]]
 
 local TweenService = game:GetService("TweenService")
@@ -17,33 +19,32 @@ local SoundController = require(script.Parent.SoundController)
 local UIKit = {}
 
 UIKit.Color = table.freeze({
-    Ink = Color3.fromRGB(23, 26, 51), -- street indigo: panel base
-    InkDeep = Color3.fromRGB(13, 15, 32),
-    InkLight = Color3.fromRGB(40, 46, 86),
-    Red = Color3.fromRGB(224, 48, 63), -- jeepney red
-    RedDark = Color3.fromRGB(140, 22, 38),
-    Yellow = Color3.fromRGB(255, 201, 60), -- sun yellow
-    Teal = Color3.fromRGB(31, 181, 168), -- banderita teal
-    Cream = Color3.fromRGB(255, 243, 214), -- warm white for text
-    Muted = Color3.fromRGB(158, 166, 204),
+    Night = Color3.fromRGB(19, 24, 32), -- panel base: night asphalt
+    Deep = Color3.fromRGB(11, 14, 19), -- insets, tracks
+    Slab = Color3.fromRGB(28, 35, 48), -- cards
+    Steel = Color3.fromRGB(54, 65, 82), -- 1 px edges
+    Chalk = Color3.fromRGB(230, 232, 227), -- text, like the court's chalk lines
+    Dim = Color3.fromRGB(135, 144, 160), -- secondary text
+    Signal = Color3.fromRGB(217, 54, 62), -- the main action and urgency
+    SignalDark = Color3.fromRGB(120, 28, 34),
+    Amber = Color3.fromRGB(233, 162, 59), -- marks what is yours
     White = Color3.new(1, 1, 1),
 })
 
+local OSWALD = "rbxasset://fonts/families/Oswald.json"
 local BUILDER = "rbxasset://fonts/families/BuilderSans.json"
 UIKit.Font = table.freeze({
-    Display = Font.new("rbxasset://fonts/families/LuckiestGuy.json"), -- sign-painter lettering
+    Display = Font.new(OSWALD, Enum.FontWeight.Bold), -- condensed scoreboard face: titles, numbers
+    Label = Font.new(OSWALD, Enum.FontWeight.Medium), -- small uppercase labels
     Body = Font.new(BUILDER, Enum.FontWeight.Medium),
     Bold = Font.new(BUILDER, Enum.FontWeight.Bold),
-    Heavy = Font.new(BUILDER, Enum.FontWeight.ExtraBold),
 })
 
 UIKit.Image = table.freeze({
-    Rim = "rbxassetid://108785768754838", -- 512 px chrome tube, 9-slice Rect(170, 170, 342, 342)
     Rays = "rbxassetid://131045294298750",
     Glow = "rbxassetid://126764346582106",
-    Ribbon = "rbxassetid://93159918664261", -- 1024x256; show at 4:1 (Stretch), not 9-slice
-    Bunting = "rbxassetid://82260993349261", -- tileable banderitas, 512x128
-    Flag = "rbxassetid://107036126615407",
+    Grain = "rbxassetid://109853492875949", -- tileable asphalt grain, 256 px
+    Ring = "rbxassetid://75433959061612", -- soft ring (shared with SkillEffects)
 })
 
 -- Embossed skill-kind icons (white, tinted per style)
@@ -57,11 +58,12 @@ UIKit.Icon = table.freeze({
     Veil = "rbxassetid://124329657309804",
 }) :: { [string]: string }
 
+-- Crisp, no overshoot: things snap into place rather than bounce
 UIKit.Motion = table.freeze({
-    Quick = TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-    Pop = TweenInfo.new(0.38, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
-    Slide = TweenInfo.new(0.45, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
-    Fade = TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+    Quick = TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+    Snap = TweenInfo.new(0.22, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+    Slide = TweenInfo.new(0.35, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+    Fade = TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
 })
 
 function UIKit.reducedMotion(): boolean
@@ -84,8 +86,8 @@ function UIKit.make(className: string, props: { [string]: any }, parent: Instanc
 end
 local make = UIKit.make
 
-function UIKit.corner(gui: GuiObject, radius: UDim?): UICorner
-    return make("UICorner", { CornerRadius = radius or UDim.new(0, 12) }, gui)
+function UIKit.corner(gui: GuiObject, radius: number?): UICorner
+    return make("UICorner", { CornerRadius = UDim.new(0, radius or 4) }, gui)
 end
 
 function UIKit.stroke(gui: GuiObject, color: Color3, thickness: number, transparency: number?): UIStroke
@@ -97,12 +99,12 @@ function UIKit.stroke(gui: GuiObject, color: Color3, thickness: number, transpar
     }, gui)
 end
 
--- Text label with the house defaults (transparent, no wrap surprises)
+-- Text label with the house defaults
 function UIKit.text(props: { [string]: any }, parent: Instance?): TextLabel
     local label = make("TextLabel", {
         BackgroundTransparency = 1,
         FontFace = UIKit.Font.Bold,
-        TextColor3 = UIKit.Color.Cream,
+        TextColor3 = UIKit.Color.Chalk,
         TextSize = 16,
     }, nil)
     for key, value in props do
@@ -112,36 +114,45 @@ function UIKit.text(props: { [string]: any }, parent: Instance?): TextLabel
     return label
 end
 
--- Rounded plate with the chrome rim sitting on its edge. `slice` sets the rim thickness
--- (0.3 ≈ 11 px tube, 32 px corners); the frame's UICorner is matched to the rim.
-function UIKit.plate(frame: GuiObject, tint: Color3?, slice: number?): ImageLabel
-    local s = slice or 0.3
-    local margin = math.round(41 * s) -- the tube's centerline is 41 px in from the image edge
-    local corner = frame:FindFirstChildOfClass("UICorner") or UIKit.corner(frame)
-    corner.CornerRadius = UDim.new(0, math.round(107 * s))
-    return make("ImageLabel", {
-        Name = "Rim",
-        BackgroundTransparency = 1,
-        Image = UIKit.Image.Rim,
-        ImageColor3 = tint or UIKit.Color.White,
-        ScaleType = Enum.ScaleType.Slice,
-        SliceCenter = Rect.new(170, 170, 342, 342),
-        SliceScale = s,
-        AnchorPoint = Vector2.new(0.5, 0.5),
-        Position = UDim2.fromScale(0.5, 0.5),
-        Size = UDim2.new(1, margin * 2, 1, margin * 2),
-        ZIndex = 20,
-        Active = false,
-    }, frame)
-end
-
--- Vertical light-to-dark wash so flat plates read as painted metal
+-- Subtle vertical light falloff so flat slabs read as surfaces
 function UIKit.wash(gui: GuiObject, bottom: number?)
-    local b = bottom or 0.62
+    local b = bottom or 0.7
     make("UIGradient", { Rotation = 90, Color = ColorSequence.new(Color3.new(1, 1, 1), Color3.new(b, b, b)) }, gui)
 end
 
--- Hover grows, press squishes, release pops with a click. Mouse, touch and gamepad selection.
+-- Steel-edged panel: small radius, 1 px edge, asphalt grain, and an accent bar on one side whose
+-- color carries meaning (rarity, team, role). Returns the accent bar and the edge stroke.
+function UIKit.panel(frame: GuiObject, accent: Color3?, side: ("Top" | "Left")?, radius: number?): (Frame?, UIStroke)
+    UIKit.corner(frame, radius or 4)
+    local edge = UIKit.stroke(frame, UIKit.Color.Steel, 1, 0.1)
+    edge.ApplyStrokeMode = Enum.ApplyStrokeMode.Border -- panels can be (blank) buttons; edge the box, not the text
+    make("ImageLabel", {
+        Name = "Grain",
+        Size = UDim2.fromScale(1, 1),
+        BackgroundTransparency = 1,
+        Image = UIKit.Image.Grain,
+        ImageTransparency = 0.9,
+        ScaleType = Enum.ScaleType.Tile,
+        TileSize = UDim2.fromOffset(128, 128),
+        ZIndex = 0,
+        Active = false,
+    }, frame)
+    if not accent then
+        return nil, edge
+    end
+    local left = side == "Left"
+    local bar: Frame = make("Frame", {
+        Name = "Accent",
+        Size = if left then UDim2.new(0, 3, 1, -8) else UDim2.new(1, -8, 0, 2),
+        Position = if left then UDim2.fromOffset(0, 4) else UDim2.fromOffset(4, 0),
+        BackgroundColor3 = accent,
+        BorderSizePixel = 0,
+        ZIndex = 20,
+    }, frame)
+    return bar, edge
+end
+
+-- Hover nudges up, press dips, release snaps back with a click. Mouse, touch and gamepad selection.
 function UIKit.button(button: GuiButton, onActivated: () -> ())
     local scale: UIScale = make("UIScale", { Name = "Juice" }, button)
     local hovering = false
@@ -150,41 +161,41 @@ function UIKit.button(button: GuiButton, onActivated: () -> ())
     end
     button.MouseEnter:Connect(function()
         hovering = true
-        to(1.06)
+        to(1.03)
     end)
     button.MouseLeave:Connect(function()
         hovering = false
         to(1)
     end)
     button.SelectionGained:Connect(function()
-        to(1.06)
+        to(1.03)
     end)
     button.SelectionLost:Connect(function()
         to(1)
     end)
     button.MouseButton1Down:Connect(function()
-        to(0.92)
+        to(0.96)
     end)
     button.Activated:Connect(function()
         SoundController.PlaySFX("UIClick")
-        scale.Scale = 0.9
-        TweenService:Create(scale, UIKit.Motion.Pop, { Scale = if hovering then 1.06 else 1 }):Play()
+        scale.Scale = 0.95
+        TweenService:Create(scale, UIKit.Motion.Snap, { Scale = if hovering then 1.03 else 1 }):Play()
         onActivated()
     end)
 end
 
--- Scale punch on an element via its own UIScale ("Pop"); don't use on Juice buttons.
+-- Short scale snap on an element via its own UIScale ("Pop"); don't use on buttons (they have Juice).
 function UIKit.pop(gui: GuiObject, amount: number?)
     local scale = gui:FindFirstChild("Pop") :: UIScale?
     if not scale then
         scale = make("UIScale", { Name = "Pop" }, gui)
     end
     local s = scale :: UIScale
-    s.Scale = amount or 1.25
-    TweenService:Create(s, UIKit.Motion.Pop, { Scale = 1 }):Play()
+    s.Scale = amount or 1.12
+    TweenService:Create(s, UIKit.Motion.Snap, { Scale = 1 }):Play()
 end
 
--- Bright diagonal sheen sweeping across `gui` every `pause` seconds. Returns the sheen frame.
+-- Faint diagonal sheen sweeping across `gui` every `pause` seconds. Returns the sheen frame.
 function UIKit.shimmer(gui: GuiObject, pause: number?): Frame
     local sheen: Frame = make("Frame", {
         Name = "Sheen",
@@ -203,22 +214,22 @@ function UIKit.shimmer(gui: GuiObject, pause: number?): Frame
         Offset = Vector2.new(-1.2, 0),
         Transparency = NumberSequence.new({
             NumberSequenceKeypoint.new(0, 1),
-            NumberSequenceKeypoint.new(0.42, 1),
-            NumberSequenceKeypoint.new(0.5, 0.55),
-            NumberSequenceKeypoint.new(0.58, 1),
+            NumberSequenceKeypoint.new(0.44, 1),
+            NumberSequenceKeypoint.new(0.5, 0.82),
+            NumberSequenceKeypoint.new(0.56, 1),
             NumberSequenceKeypoint.new(1, 1),
         }),
     }, sheen)
     if UIKit.reducedMotion() then
         sheen.Visible = false
     else
-        TweenService:Create(gradient, TweenInfo.new(1.1, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut, -1, false, pause or 2.4),
+        TweenService:Create(gradient, TweenInfo.new(0.9, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut, -1, false, pause or 3),
             { Offset = Vector2.new(1.2, 0) }):Play()
     end
     return sheen
 end
 
--- Endless rotation (rays, halos). Returns the tween so callers can swap speeds.
+-- Endless rotation (rays). Returns the tween so callers can swap speeds.
 function UIKit.spin(gui: GuiObject, seconds: number): Tween?
     if UIKit.reducedMotion() then return nil end
     gui.Rotation = gui.Rotation % 360
@@ -238,10 +249,10 @@ function UIKit.countTo(label: TextLabel, target: number)
         end)
         value = created
     end
-    TweenService:Create(value :: NumberValue, TweenInfo.new(0.45, Enum.EasingStyle.Quad), { Value = target }):Play()
+    TweenService:Create(value :: NumberValue, TweenInfo.new(0.35, Enum.EasingStyle.Quad), { Value = target }):Play()
 end
 
--- Little shake for big moments (a few px, a quarter second)
+-- Short hard shake for big moments (a few px, a quarter second)
 function UIKit.shake(gui: GuiObject, strength: number?)
     if UIKit.reducedMotion() then return end
     local home = gui.Position
@@ -249,44 +260,47 @@ function UIKit.shake(gui: GuiObject, strength: number?)
         for i = 1, 6 do
             local s = (strength or 5) * (1 - i / 7)
             gui.Position = home + UDim2.fromOffset(math.random(-10, 10) / 10 * s, math.random(-10, 10) / 10 * s)
-            task.wait(0.035)
+            task.wait(0.03)
         end
         gui.Position = home
     end)
 end
 
--- Banderita flags burst up from `origin` (scale position in `layer`) and flutter down.
-function UIKit.confetti(layer: GuiObject, count: number, colors: { Color3 }, origin: Vector2?)
-    if UIKit.reducedMotion() then return end
-    local from = origin or Vector2.new(0.5, 0.45)
-    for _ = 1, count do
-        local size = math.random(16, 30)
-        local flag: ImageLabel = make("ImageLabel", {
-            BackgroundTransparency = 1,
-            Image = UIKit.Image.Flag,
-            ImageColor3 = colors[math.random(1, #colors)],
-            AnchorPoint = Vector2.new(0.5, 0.5),
-            Size = UDim2.fromOffset(size, size),
-            Position = UDim2.fromScale(from.X, from.Y),
-            Rotation = math.random(0, 360),
-            ZIndex = 50,
-        }, layer)
-        local dx = (math.random() - 0.5) * 0.9
-        local rise = TweenService:Create(flag, TweenInfo.new(0.35 + math.random() * 0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-            Position = UDim2.fromScale(from.X + dx * 0.6, from.Y - 0.2 - math.random() * 0.3),
-            Rotation = flag.Rotation + math.random(-180, 180),
-        })
-        rise.Completed:Once(function()
-            local fall = 1.1 + math.random() * 0.8
-            TweenService:Create(flag, TweenInfo.new(fall, Enum.EasingStyle.Sine, Enum.EasingDirection.In), {
-                Position = UDim2.fromScale(from.X + dx, 1.1),
-                Rotation = flag.Rotation + math.random(-360, 360),
-                ImageTransparency = 0.6,
-            }):Play()
-            Debris:AddItem(flag, fall + 0.1)
-        end)
-        rise:Play()
+-- Ring that blasts outward from the center of `layer` and fades (reveals, big moments)
+function UIKit.shockwave(layer: GuiObject, color: Color3, size: number?)
+    local ring: ImageLabel = make("ImageLabel", {
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.fromScale(0.5, 0.45),
+        Size = UDim2.fromScale(0.2, 0.2),
+        BackgroundTransparency = 1,
+        Image = UIKit.Image.Ring,
+        ImageColor3 = color,
+        ImageTransparency = 0.05,
+        ZIndex = 8,
+    }, layer)
+    make("UIAspectRatioConstraint", {}, ring)
+    local finish = size or 1.6
+    TweenService:Create(ring, TweenInfo.new(0.55, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+        Size = UDim2.fromScale(finish, finish),
+        ImageTransparency = 1,
+    }):Play()
+    Debris:AddItem(ring, 0.6)
+end
+
+-- Blurs the world behind a menu. `pulse` briefly deepens it (a hit of focus on big reveals).
+local blur: BlurEffect? = nil
+function UIKit.blur(on: boolean, pulse: boolean?)
+    local camera = Workspace.CurrentCamera
+    if not camera then return end
+    if not blur or blur.Parent ~= camera then
+        blur = make("BlurEffect", { Name = "MenuBlur", Size = 0 }, camera)
     end
+    local effect = blur :: BlurEffect
+    local target = if on then 12 else 0
+    if pulse and not UIKit.reducedMotion() then
+        effect.Size = 24
+    end
+    TweenService:Create(effect, UIKit.Motion.Slide, { Size = target }):Play()
 end
 
 -- Every HUD block scales with screen height so it fits phones and stays crisp on big monitors.
