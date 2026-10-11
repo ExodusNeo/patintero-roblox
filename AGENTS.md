@@ -37,6 +37,20 @@ rollable **Styles** (rarity-weighted, each with a passive + two skills) in the s
   Manual equivalent: testing dropdown → **Server & Clients** → Play (F7) → End Session.
 - `.codegraph/` (CodeGraph index) only reflects `src/` on disk; use it for disk-side work only.
 
+### Blender assets (Blender MCP) — `tools/blender/`, `assets/`
+- **Style animations** are authored in `tools/blender/style_anims.py` (the source of truth: keyframes in
+  Roblox joint space, see its header). In Blender: `exec` `rig.py` (default R15 rig, exact joint layout
+  from Studio, in its own `PatinteroAnim` scene), then `style_anims.py` → `build_actions()` (one action
+  per animation, saved in `assets/blender/StyleAnimations.blend`) and `export_luau(...)` to regenerate
+  `src/shared/Modules/StyleAnimations.luau`. `preview.py` → `sheet([(name, keyIndex), ...])` lines up
+  posed rig copies for one-render pose checks. Push the regenerated module into Studio (it is generated:
+  never hand-edit it).
+- **Effect sprites** come from `tools/blender/fx_textures.py` (white-on-transparent PNGs in `assets/fx/`),
+  uploaded with the Studio MCP `upload_image` tool (serve `assets/fx` on localhost); the ids live in
+  `SkillEffects.TEX`. Re-upload and update the ids if a sprite changes.
+- Disk → Studio for generated/new files: serve `src/` on localhost and `HttpService:GetAsync` each file
+  into its ModuleScript from an Edit-mode `execute_luau` (HttpEnabled on briefly, then restored).
+
 ### Two places, one place file
 - The experience has a **Hub** place (start place, `88319696116229`) and a **Match** place.
   The *same* place file is published to both; `Modules.GameMode` picks the side from `game.PlaceId`
@@ -116,10 +130,10 @@ only new systems. If several rows match, load all of them. If none match, say so
 
 ### Styles menu (hub; G key or the top-left STYLES button) — `SpinController`
 - Left: 3D preview of the player's own avatar on a podium (ViewportFrame + WorldModel, scripts
-  stripped), background tinted by rarity, looping the current style's `pose`.
+  stripped), background tinted by rarity, looping the current style's showcase dance (`<id>_Pose`).
 - Right: style name, rarity, description, skills and passives, the roll **odds** per tier (from
   `Config.Styles.RarityWeights`) listing every style in each tier, and SPIN.
-- Spin: names shuffle and slow down, then the result is revealed with its pose. The result (name,
+- Spin: names shuffle and slow down, then the result is revealed with its dance. The result (name,
   EQUIPPED tag, skill bar) stays hidden until the reveal even though the server sets `Style` instantly.
   The skill bar is hidden while the menu is open.
 
@@ -169,8 +183,8 @@ only new systems. If several rows match, load all of them. If none match, say so
   re-equip an earlier style except rolling it again.
 - Rarities: Common 55%, Rare 30%, Epic 12%, Legendary 3% (see `Config.Styles`).
 - Spins: start with 10; +1 per round played, +1 per Tubig. Saved in DataStore with the Style.
-- Each Style = passive stat modifiers (speed, stamina, reach) + **Q** and **E** skills + a showcase
-  `pose` (an emote from the character's `Animate` script: wave, point, dance, dance2, dance3, cheer, laugh).
+- Each Style = passive stat modifiers (speed, stamina, reach) + **Q** and **E** skills, each with its own
+  custom animation and effects, plus a looping showcase dance (see *Style animations & effects*).
 - Skill kinds: `Dash`, `Blink`, `Haste`, `SecondWind`, `LongArm`, `Slow` (area, enemies only;
   `mult = 0` is a freeze), `Veil` (tag-immune + see-through). Roster lives in `Styles.luau`.
 
@@ -186,15 +200,37 @@ only new systems. If several rows match, load all of them. If none match, say so
   or Blink raycasts), parts under 1.5 studs get `CastShadow = false`. Run it after adding map pieces by hand.
 - Hub queue pads glow (a `PointLight` in the pad color) and emit rising sparkles (`HubService.decoratePad`).
 
+### Style animations & effects (client) — `StyleAnimator`, `SkillEffects`, data in `StyleAnimations`
+- 24 Blender-made animations: `<styleId>_Q`, `<styleId>_E` (one-shots) and `<styleId>_Pose` (looping
+  showcase dance in the Styles menu). `StyleAnimator.Play(character, name)` / `Stop` overrides joint
+  `Transform`s right after the Animator (`PreSimulation`), blending in/out (0.08 s / 0.15 s) over the
+  current animation; joints no Animator drives blend from rest. Works on Motor6D and AnimationConstraint
+  rigs and on the ViewportFrame preview. **Nothing is uploaded**: the caster plays its own cast instantly,
+  every other client plays it on `SkillCast` (Studio-registered temp animation ids don't work live, so
+  real Animation assets would otherwise have to be uploaded by hand).
+- Dances: Tsinelas *Tinikling* hops (hands on hips), Kanto *Budots*, Bantay guard shuffle, Sipa juggling
+  kicks, Tumbang *tumbang preso* slipper throw, Habagat flowing wind arms, Anino low shadow seal,
+  Bathala levitation.
+- Skills: Tsinelas Dash (anime sprint) / Takbo! (set + fist pump); Kanto shoulder charge / Second Wind
+  (big breath); Bantay fencing Lunge / Long Arm (arms snap wide); Sipa hop-kick / knee juggles; Tumbang
+  diving reach / Lata Shock (overhead can slam); Habagat Gale Step (full spin) / Monsoon (gather, rise,
+  slam); Anino shadow run / Shadow Veil (cloaked crouch); Bathala Divine Step (rise, arms to the sky) /
+  Divine Halt (palm out, other arm raised).
+- `SkillEffects.Play(styleId, slot, skill, casterCharacter, position)`, effect per `<styleId>_<slot>`, colored
+  by the style's `THEME`: dust, speed lines, trails, ground rings (flat particle sprites), slash crescent,
+  glowing hands, star/leaf/feather bursts, afterimages, a thrown tin can + shock ring (Lata Shock), rain
+  over the Monsoon radius, smoke bomb + wisps (Shadow Veil), light pillars and a spreading clock rune
+  (Bathala). Impact moments are delayed to match the animation (e.g. Lata Shock lands at ~0.32 s).
+
 ### Presentation (client) — audio, VFX, HUD
 - **Audio** (`SoundController`, classic `Sound` + SoundGroups Master → SFX / UI / Ambience / Music; all ids
   in `SOUND_CONFIGS`): hub-only acoustic music (`HubMusic`) under the street ambience; whistles for the
   countdown, round start and round end; clock ticks each second in a round's last 10 s; crowd cheer on
   Tubig and at match over; a heartbeat that fades in and quickens below ~35% stamina; UI clicks.
   3D one-shots play from an `Attachment` on Terrain.
-- **Skills** (`StyleController`): each skill kind has its own cast sound (`SKILL_SFX`). Dash/Haste leave a
-  rarity-colored trail on the caster; Slow sweeps an ice ring over its radius (white for a freeze).
-  Characters with `SlowMult` get an icy `Highlight` for everyone else; your own screen gets an icy tint.
+- **Skills** (`StyleController`): each skill kind has its own cast sound (`SKILL_SFX`); the animation and
+  effects are per style (below). Characters with `SlowMult` get an icy `Highlight` for everyone else;
+  your own screen gets an icy tint.
 - **Spins** (`SpinController`): ticks that drop in pitch as the roll slows; the reveal plays a chime
   (Common/Rare), fanfare (Epic) or boom + fanfare (Legendary), flashes the menu in the rarity color and
   thickens the panel outline (the outline is always tinted by the shown style's rarity).

@@ -2,7 +2,7 @@
 --[[
     SpinController.luau
     Hub-only Styles menu (G or the STYLES button):
-    - a 3D preview of your own avatar doing the selected style's pose (emotes from your Animate script)
+    - a 3D preview of your own avatar looping the style's showcase dance (StyleAnimator, made in Blender)
     - the roll odds per tier, listing every style in each tier
     - SPIN, which shuffles through the roster and reveals the result with its pose
     The SPIN button is Modal so the mouse is free even if the camera is mouse-locked.
@@ -18,6 +18,7 @@ local Styles = require(ReplicatedStorage.Shared.Modules.Styles)
 local Remotes = require(ReplicatedStorage.Shared.Modules.Remotes)
 local Config = require(ReplicatedStorage.Shared.Modules.Config)
 local SoundController = require(script.Parent.SoundController)
+local StyleAnimator = require(script.Parent.StyleAnimator)
 
 local SpinController = {}
 
@@ -41,8 +42,7 @@ local PANEL_EDGE = Color3.fromRGB(70, 70, 85)
 local spinning = false
 local avatar: Model? = nil
 local avatarSource: Model? = nil -- the character the preview was copied from
-local poseTracks: { [string]: AnimationTrack } = {}
-local currentTrack: AnimationTrack? = nil
+local posing: string? = nil -- showcase animation the preview avatar is looping
 local PODIUM_TOP = -3
 
 local function getSpins(): number
@@ -61,8 +61,7 @@ local function ensureAvatar()
     if avatar then
         avatar:Destroy()
     end
-    avatar, avatarSource, currentTrack = nil, nil, nil
-    table.clear(poseTracks)
+    avatar, avatarSource, posing = nil, nil, nil
 
     local wasArchivable = character.Archivable
     character.Archivable = true
@@ -90,32 +89,13 @@ local function ensureAvatar()
     avatar, avatarSource = clone, character
 end
 
--- Loops the style's emote on the preview avatar. Tracks are loaded once per pose (Animator track limit).
+-- Loops the style's showcase dance on the preview avatar (kept running across refreshes).
 local function playPose(style: Types.StyleDef)
     ensureAvatar()
-    if not avatar then return end
-    local humanoid = avatar:FindFirstChildOfClass("Humanoid")
-    local animator = if humanoid then humanoid:FindFirstChildOfClass("Animator") else nil
-    if not animator then return end
-
-    local track = poseTracks[style.pose]
-    if not track then
-        local animate = player.Character and player.Character:FindFirstChild("Animate")
-        local holder = animate and animate:FindFirstChild(style.pose)
-        local animation = holder and holder:FindFirstChildOfClass("Animation")
-        if not animation then return end
-        local loaded = animator:LoadAnimation(animation)
-        loaded.Looped = true
-        poseTracks[style.pose] = loaded
-        track = loaded
-    end
-    if currentTrack and currentTrack ~= track then
-        currentTrack:Stop(0.25)
-    end
-    if not track.IsPlaying then
-        track:Play(0.25)
-    end
-    currentTrack = track
+    local name = `{style.id}_Pose`
+    if not avatar or posing == name then return end
+    StyleAnimator.Play(avatar, name)
+    posing = name
 end
 
 local function showStyle(style: Types.StyleDef, withPose: boolean)
@@ -160,9 +140,9 @@ local function setOpen(open: boolean)
     end
     if open then
         refresh()
-    elseif currentTrack then
-        currentTrack:Stop(0)
-        currentTrack = nil
+    elseif avatar then
+        StyleAnimator.Stop(avatar)
+        posing = nil
     end
 end
 

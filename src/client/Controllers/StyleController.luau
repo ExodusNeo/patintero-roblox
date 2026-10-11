@@ -1,8 +1,8 @@
 --!strict
 --[[
     StyleController.luau
-    Q/E skill input with local cooldown prediction, the skill bar HUD,
-    and cast VFX for every player's skills (SkillCast from the server).
+    Q/E skill input with local cooldown prediction, the skill bar HUD, and every player's casts
+    (SkillCast from the server): the style's own animation (StyleAnimator), effects (SkillEffects) and sound.
 ]]
 
 local Players = game:GetService("Players")
@@ -10,8 +10,6 @@ local Workspace = game:GetService("Workspace")
 local ContextActionService = game:GetService("ContextActionService")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local TweenService = game:GetService("TweenService")
-local Debris = game:GetService("Debris")
 
 local Types = require(ReplicatedStorage.Shared.Modules.Types)
 local Styles = require(ReplicatedStorage.Shared.Modules.Styles)
@@ -19,6 +17,8 @@ local Remotes = require(ReplicatedStorage.Shared.Modules.Remotes)
 local MovementController = require(script.Parent.MovementController)
 local SoundController = require(script.Parent.SoundController)
 local TouchLayout = require(script.Parent.TouchLayout)
+local StyleAnimator = require(script.Parent.StyleAnimator)
+local SkillEffects = require(script.Parent.SkillEffects)
 
 local StyleController = {}
 
@@ -59,15 +59,17 @@ local function skillFor(style: Types.StyleDef, slot: Types.SkillSlot): Types.Ski
 end
 
 local function cast(slot: Types.SkillSlot)
-    local skill = skillFor(currentStyle(), slot)
+    local style = currentStyle()
+    local skill = skillFor(style, slot)
     local now = os.clock()
     if now - (lastCast[slot] or -math.huge) < skill.cooldown then return end
 
     local character = player.Character
     local humanoid = if character then character:FindFirstChildOfClass("Humanoid") else nil
-    if not humanoid or humanoid.Health <= 0 then return end
+    if not character or not humanoid or humanoid.Health <= 0 then return end
 
     lastCast[slot] = now
+    StyleAnimator.Play(character, `{style.id}_{slot}`) -- predicted; others play it when SkillCast arrives
     if skill.kind == "Dash" then
         MovementController.Dash(skill.power or 55, skill.duration or 0.2)
     elseif skill.kind == "Blink" then
@@ -76,75 +78,6 @@ local function cast(slot: Types.SkillSlot)
         MovementController.RestoreStamina(skill.power or 50)
     end
     Remotes.GetEvent("UseSkill"):FireServer(slot)
-end
-
-local function pulse(position: Vector3, radius: number, color: Color3)
-    local sphere = Instance.new("Part")
-    sphere.Shape = Enum.PartType.Ball
-    sphere.Anchored = true
-    sphere.CanCollide = false
-    sphere.CanQuery = false
-    sphere.CanTouch = false
-    sphere.CastShadow = false
-    sphere.Material = Enum.Material.Neon
-    sphere.Color = color
-    sphere.Transparency = 0.4
-    sphere.Size = Vector3.one * 2
-    sphere.Position = position
-    sphere.Parent = Workspace
-
-    TweenService:Create(sphere, TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-        Size = Vector3.one * radius * 2,
-        Transparency = 1,
-    }):Play()
-    Debris:AddItem(sphere, 0.5)
-end
-
--- Flat ring that sweeps out along the ground to the skill's radius (Slow / freeze area).
-local function shockwave(position: Vector3, radius: number, color: Color3)
-    local ring = Instance.new("Part")
-    ring.Shape = Enum.PartType.Cylinder
-    ring.Anchored = true
-    ring.CanCollide = false
-    ring.CanQuery = false
-    ring.CanTouch = false
-    ring.CastShadow = false
-    ring.Material = Enum.Material.Neon
-    ring.Color = color
-    ring.Transparency = 0.25
-    ring.Size = Vector3.new(0.2, 2, 2)
-    ring.CFrame = CFrame.new(position - Vector3.new(0, 2.9, 0)) * CFrame.Angles(0, 0, math.rad(90)) -- root height above the feet
-    ring.Parent = Workspace
-
-    TweenService:Create(ring, TweenInfo.new(0.5, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
-        Size = Vector3.new(0.2, radius * 2, radius * 2),
-        Transparency = 1,
-    }):Play()
-    Debris:AddItem(ring, 0.55)
-end
-
--- Speed streak behind the caster while a Dash / Haste lasts.
-local function streak(character: Model, color: Color3, duration: number)
-    local root = character:FindFirstChild("HumanoidRootPart")
-    if not root then return end
-    local top = Instance.new("Attachment")
-    top.Position = Vector3.new(0, 0.9, 0)
-    local bottom = Instance.new("Attachment")
-    bottom.Position = Vector3.new(0, -0.9, 0)
-    local trail = Instance.new("Trail")
-    trail.Attachment0 = top
-    trail.Attachment1 = bottom
-    trail.Color = ColorSequence.new(color, Color3.new(1, 1, 1))
-    trail.Transparency = NumberSequence.new(0.35, 1)
-    trail.Lifetime = 0.3
-    trail.LightEmission = 0.7
-    trail.FaceCamera = true
-    top.Parent = root
-    bottom.Parent = root
-    trail.Parent = root
-    for _, item in { trail, top, bottom } do
-        Debris:AddItem(item, duration + trail.Lifetime)
-    end
 end
 
 -- Slowed / frozen characters (SlowMult set by the server) glow icy for everyone else.
@@ -201,23 +134,17 @@ local function onSkillCast(casterUserId: any, styleId: any, slot: any, position:
     local style = Styles.Get(if typeof(styleId) == "string" then styleId else nil)
     local skill = skillFor(style, slot)
 
-    local color = Styles.RarityColors[style.rarity]
-    if skill.kind == "Slow" then
-        shockwave(position, skill.radius or 6, if (skill.mult or 0.5) <= 0 then Color3.new(1, 1, 1) else ICE_COLOR)
-        pulse(position, 3, ICE_COLOR)
-    else
-        pulse(position, 4, color)
-    end
+    local caster = if typeof(casterUserId) == "number" then Players:GetPlayerByUserId(casterUserId) else nil
+    local casterCharacter = if caster then caster.Character else nil
+
+    SkillEffects.Play(style.id, slot, skill, casterCharacter, position)
     local sfx = SKILL_SFX[skill.kind]
     SoundController.PlaySpatialSFX(sfx.sound, position, sfx.pitch)
 
-    local caster = if typeof(casterUserId) == "number" then Players:GetPlayerByUserId(casterUserId) else nil
-    local casterCharacter = if caster then caster.Character else nil
-    if not casterCharacter then return end
-    if skill.kind == "Veil" and caster ~= player then
+    if not casterCharacter or caster == player then return end
+    StyleAnimator.Play(casterCharacter, `{style.id}_{slot}`)
+    if skill.kind == "Veil" then
         veil(casterCharacter, skill.duration or 2)
-    elseif skill.kind == "Dash" or skill.kind == "Haste" then
-        streak(casterCharacter, color, skill.duration or 0.3)
     end
 end
 
