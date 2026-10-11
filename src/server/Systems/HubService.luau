@@ -36,6 +36,28 @@ local PAD_COLORS: { [number]: Color3 } = {
 
 local pads: { Pad } = {}
 
+-- Soft glow and rising sparkles in the pad's color (the pad is a cylinder lying on its side, so +X is up).
+local function decoratePad(pad: BasePart)
+    local light = Instance.new("PointLight")
+    light.Color = pad.Color
+    light.Brightness = 1.5
+    light.Range = 14
+    light.Parent = pad
+
+    local sparkles = Instance.new("ParticleEmitter")
+    sparkles.Name = "Sparkles"
+    sparkles.EmissionDirection = Enum.NormalId.Right
+    sparkles.Color = ColorSequence.new(pad.Color, Color3.new(1, 1, 1))
+    sparkles.LightEmission = 1
+    sparkles.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.35), NumberSequenceKeypoint.new(1, 0) })
+    sparkles.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.2), NumberSequenceKeypoint.new(1, 1) })
+    sparkles.Lifetime = NumberRange.new(1.2, 2.2)
+    sparkles.Speed = NumberRange.new(2, 4)
+    sparkles.SpreadAngle = Vector2.new(8, 8)
+    sparkles.Rate = 8
+    sparkles.Parent = pad
+end
+
 -- Builds the hub as a barangay street (houses, sari-sari store, poles, banderitas, jeepney, welcome
 -- arch) with the queue pads on the road. Built around the origin, then pivoted to Config.Hub.Center.
 -- Also run once in edit mode so it can be decorated by hand.
@@ -104,6 +126,7 @@ function HubService.BuildHub(): Model
         pad.Color = PAD_COLORS[size] or Color3.new(1, 1, 1)
         pad.Transparency = 0.35
         pad:SetAttribute("PadSize", size)
+        decoratePad(pad)
         pad.Parent = padFolder
 
         local billboard = Instance.new("BillboardGui")
@@ -125,6 +148,7 @@ function HubService.BuildHub(): Model
         status.Parent = billboard
     end
 
+    FilipinoStreetEnvironment.OptimizeDecor(hub)
     hub.WorldPivot = CFrame.new()
     hub:PivotTo(CFrame.new(Config.Hub.Center))
     hub.Parent = Workspace

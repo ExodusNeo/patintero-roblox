@@ -9,6 +9,7 @@
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local ContextActionService = game:GetService("ContextActionService")
+local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 
@@ -26,6 +27,9 @@ local camera = Workspace.CurrentCamera or Workspace:WaitForChild("Camera") :: Ca
 
 local isGuard = false
 local lastTagTime = 0
+local slashTrack: AnimationTrack? = nil -- loaded once per character
+
+local SWING_ARM = { "RightUpperArm", "RightLowerArm", "RightHand" }
 
 local function findTaggablePasser(): Player?
     local character = player.Character
@@ -64,7 +68,42 @@ local function findTaggablePasser(): Player?
     return bestPlayer
 end
 
+-- Swipe with the Animate script's sword-slash animation. Played on our own character, so it replicates:
+-- everyone sees the guard swing.
+local function playSwingAnimation()
+    local track = slashTrack
+    if not track then
+        local character = player.Character
+        local animate = character and character:FindFirstChild("Animate")
+        local holder = animate and animate:FindFirstChild("toolslash")
+        local animation = holder and holder:FindFirstChildOfClass("Animation")
+        local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+        local animator = humanoid and humanoid:FindFirstChildOfClass("Animator")
+        if not (animation and animator) then return end
+        local loaded = animator:LoadAnimation(animation)
+        loaded.Priority = Enum.AnimationPriority.Action
+        slashTrack = loaded
+        track = loaded
+    end
+    track:Play(0.05, 1, 1.6)
+end
+
+-- First person hides your own body; show the swinging arm while the swipe plays.
+local function showSwingArm()
+    local track = slashTrack
+    local character = player.Character
+    if not (track and track.IsPlaying and character) then return end
+    for _, name in SWING_ARM do
+        local part = character:FindFirstChild(name)
+        if part and part:IsA("BasePart") then
+            part.LocalTransparencyModifier = 0
+        end
+    end
+end
+
 local function playSwingEffect()
+    playSwingAnimation()
+
     -- Arm whoosh sound
     SoundController.PlaySFX("SlideWhoosh", Vector2.new(1.35, 1.55), 0.6)
 
@@ -120,6 +159,11 @@ local function setGuardControls(enabled: boolean)
 end
 
 function TagController.Init()
+    player.CharacterAdded:Connect(function()
+        slashTrack = nil
+    end)
+    RunService:BindToRenderStep("PatinteroSwingArm", Enum.RenderPriority.Camera.Value + 1, showSwingArm)
+
     -- Listen to player role updates
     local playerStateEvent = Remotes.GetEvent("PlayerStateUpdated")
     playerStateEvent.OnClientEvent:Connect(function(state: Types.PlayerMatchState)

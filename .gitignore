@@ -16,3 +16,6 @@ Thumbs.db
 
 # CodeGraph Index
 .codegraph/
+
+# Blender auto-backups
+*.blend1
