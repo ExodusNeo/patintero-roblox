@@ -148,6 +148,12 @@ only new systems. If several rows match, load all of them. If none match, say so
   briefly slow the stride. Stamina max scales with the style's `staminaMult`.
 - Slide (C/Ctrl) and stamina-limited sprint (Shift) as before; first person is forced in matches.
 
+### Avatar height (both places) — `AvatarService`, tunable `Config.Avatar.Height`
+- Every R15 character is uniformly scaled (`Model:ScaleTo`) to the same standing height once its
+  appearance loads (`CharacterAppearanceLoaded`), so tall or tiny avatars get no reach, hitbox or
+  visibility edge. Height is measured from the rest pose via the R15 rig attachments (works with both
+  Motor6D and AnimationConstraint joints); accessories don't count. R6 rigs are left alone.
+
 ### Controls (keyboard / gamepad / touch) — ContextActionService, touch spots in `TouchLayout`
 | Action | Keyboard | Gamepad | Touch |
 | --- | --- | --- | --- |
