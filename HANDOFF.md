@@ -35,7 +35,7 @@ the current state. Agents update it after every change (AGENTS.md §1).
   TUBIG board, run wind + `BodyPose`, spectate + TUBIG revive, server movement check, XP/levels + daily spins,
   MVP, crowd loop, line-hop whoosh, `MatchLoop` funnel, English style names, first-time tutorial). Details per
   feature in AGENTS.md §5.
-- **Open: branch `feat/interactive-tutorial`** (its PR is linked in the latest session) — the tutorial reworked to
+- **Open: PR #15** (`feat/interactive-tutorial`) — the tutorial reworked to
   be learn-by-doing: 7 steps that complete on the action (sprint, slide, Zone 2 past a guard, a skill, Safehouse,
   TUBIG with fanfare, guard practice tagging a runner), guards that track you along their line, a step card +
   world beacon (`TutorialController`), +3 spins on finishing. New remote `PracticeTag`, type `TutorialStepInfo`.
@@ -48,7 +48,7 @@ the current state. Agents update it after every change (AGENTS.md §1).
 - Not verified anywhere yet (live only): hub → match / tutorial → hub teleports, reserved servers, funnel data.
 
 ## Next steps / open items
-- Review and merge the `feat/interactive-tutorial` PR.
+- Review and merge PR #15.
 - Save the place (Ctrl+S), publish the hub and republish over the match place, so the wind/arms go live.
 - Paste the `CREDITS.md` list into the game description (CC BY props require attribution).
 - Republish over the match place after the hub changes, then test the hub → match → hub loop live with the
