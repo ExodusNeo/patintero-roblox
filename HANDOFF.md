@@ -31,8 +31,9 @@ the current state. Agents update it after every change (AGENTS.md §1).
   they hold data/types or top-level code only. Expected.
 
 ## Current state (2026-10-16)
-- Branch `main` at `47613ff` (PR #13 "Kanto Night" UI merged). No open PRs.
-- **Uncommitted, already in Studio and synced to `src/`** — the hub rebuild:
+- `main` at `47613ff` (PR #13 merged). **Open: PR #14** (`feat/hub-court-progression-tutorial`) with everything
+  below; the user merges. Until then, push follow-up changes to that branch.
+- **In PR #14** — the hub rebuild:
   - Hub at dusk with `HubStreet` (night lighting, prop spots, Sketchfab props placed by `HubStreet.Dress`).
   - Lobbies moved onto covered-court bleachers (Red/Blue sections per 2/4/6/8 lobby; the side you sit on is
     your team), auto-walk to a free seat (`SeatWalk` attribute), owner test bleacher.
@@ -40,7 +41,7 @@ the current state. Agents update it after every change (AGENTS.md §1).
   - Modified: `HubService`, `MatchService`, `FilipinoStreetEnvironment`, `MovementController`, `AGENTS.md`,
     `CLAUDE.md`, `tools/sync-receiver.js`. New: `HubStreet.luau`, `CREDITS.md`, `HANDOFF.md`,
     `assets/court/`, `assets/models/`, `tools/blender/{court_texture,hub_props,preview_hub}.py`.
-- **Uncommitted, in Studio and synced** — run wind + role arms (match, AGENTS.md §5 *Presentation*):
+- **In PR #14** — run wind + role arms (match, AGENTS.md §5 *Presentation*):
   - `FirstPersonController`: wind streaks past both sides of the view + `RunWind` loop, scaled by speed.
   - New `BodyPose` controller (was `RoleArms`): Passers pump arms side to side while running, Guards hold arms
     wide (blocking); steps aside for style animations and Action tracks (tag swipe). Slide pose: body drops
@@ -52,7 +53,7 @@ the current state. Agents update it after every change (AGENTS.md §1).
   - Verified: solo playtest (poses measured, body drop = camera dip, screenshots) and 2-client tests (slide
     pose seen by the other client; relay drops too-soon / too-far / unknown events; third-person screenshots of
     guard arms, runner pump and slide; no errors).
-- **Uncommitted, in Studio and synced** — game improvements batch (AGENTS.md §5 Hub + Match):
+- **In PR #14** — game improvements batch (AGENTS.md §5 Hub + Match):
   - Hub: short-handed lobby start (2+ seated, 30 s), weekly TUBIG board (`LeaderboardService`, never written
     from Studio), funnel steps (`FunnelService`).
   - Match: spectate when tagged, Tubig revives a teammate, server movement check (rubber-bands too-fast
@@ -64,7 +65,7 @@ the current state. Agents update it after every change (AGENTS.md §1).
     (board renders, 2/4 lobby starts after 30 s; ReserveServer is 403 in Studio as expected). No errors.
   - The live weekly board has 4 Tubigs on ExodusNeo from today's Studio tests (before Studio writes were
     blocked); remove with `RemoveAsync("1819520599")` on this week's scope if unwanted.
-- **Uncommitted, in Studio and synced** — follow-up batch:
+- **In PR #14** — follow-up batch:
   - One 4 V 4 lobby (`PadSizes = { 8 }`): the 2/4/6 bleacher sections were deleted from the saved hub and the
     8-player pair moved to the middle of the bleachers (z 136).
   - First-time tutorial (`TutorialService`, `StudioMode = "Tutorial"` in Studio) replaces the HOW TO PLAY card;
@@ -77,8 +78,7 @@ the current state. Agents update it after every change (AGENTS.md §1).
   vault + handoff update after every change, always ponytail, always caveman ultra.
 
 ## Next steps / open items
-- Commit the hub rebuild on a `feat/*` branch and open a PR to `main` (base PRs on `main`, never stacked).
-  `tools/blender/__pycache__/` should go in `.gitignore` before committing.
+- Review and merge PR #14.
 - Save the place (Ctrl+S), publish the hub and republish over the match place, so the wind/arms go live.
 - Paste the `CREDITS.md` list into the game description (CC BY props require attribution).
 - Republish over the match place after the hub changes, then test the hub → match → hub loop live with the
