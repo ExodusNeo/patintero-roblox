@@ -19,3 +19,11 @@ Thumbs.db
 
 # Blender auto-backups
 *.blend1
+
+# Local tooling output
+graphify-out/
+__pycache__/
+
+# Blender preview renders and FBX texture extractions (textures are embedded in the .fbx)
+assets/*/preview/
+*.fbm
