@@ -16,6 +16,7 @@ local CourtVFXController = require(script.Parent.Controllers.CourtVFXController)
 local FirstPersonController = require(script.Parent.Controllers.FirstPersonController)
 local MovementController = require(script.Parent.Controllers.MovementController)
 local TagController = require(script.Parent.Controllers.TagController)
+local BodyPose = require(script.Parent.Controllers.BodyPose)
 local StyleController = require(script.Parent.Controllers.StyleController)
 local SpinController = require(script.Parent.Controllers.SpinController)
 
@@ -30,6 +31,7 @@ if GameMode.Current == "Match" then
     CourtVFXController.Init()
     FirstPersonController.Init()
     TagController.Init()
+    BodyPose.Init()
 else
     SpinController.Init()
 end

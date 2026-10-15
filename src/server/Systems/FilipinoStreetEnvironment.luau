@@ -523,52 +523,6 @@ function FilipinoStreetEnvironment.BuildHouseRow(parent: Instance, fromPos: Vect
     return row
 end
 
--- Classic passenger jeepney. `cf` = ground center, LookVector = front.
-function FilipinoStreetEnvironment.BuildJeepney(parent: Instance, cf: CFrame, bodyColor: Color3?, routeText: string?): Model
-    local jeep = Instance.new("Model")
-    jeep.Name = "Jeepney"
-    local paint = bodyColor or Color3.fromRGB(200, 40, 40)
-    local chrome = Color3.fromRGB(200, 205, 210)
-
-    jeep.PrimaryPart = createPart("Chassis", Vector3.new(7, 1, 22), cf * CFrame.new(0, 2, 0), Enum.Material.Metal, Color3.fromRGB(40, 40, 45), jeep)
-    createPart("Cabin", Vector3.new(7, 5, 14), cf * CFrame.new(0, 5, 3), Enum.Material.SmoothPlastic, paint, jeep)
-    createPart("Hood", Vector3.new(6.4, 3, 6), cf * CFrame.new(0, 3.9, -7), Enum.Material.Metal, chrome, jeep)
-    createPart("Roof", Vector3.new(7.6, 0.6, 20), cf * CFrame.new(0, 8.4, 1), Enum.Material.Metal, Color3.fromRGB(235, 235, 230), jeep)
-    decor("Windshield", Vector3.new(6.4, 2.6, 0.3), cf * CFrame.new(0, 6.8, -4.2), Enum.Material.Glass, Color3.fromRGB(120, 150, 170), jeep).Transparency = 0.4
-    decor("Grille", Vector3.new(5, 2, 0.3), cf * CFrame.new(0, 3.6, -10.1), Enum.Material.DiamondPlate, chrome, jeep)
-    decor("Bumper", Vector3.new(7.4, 0.8, 0.6), cf * CFrame.new(0, 2.2, -10.6), Enum.Material.Metal, chrome, jeep)
-    for _, side in { -1, 1 } do
-        decor("Headlight", Vector3.new(1, 1, 0.4), cf * CFrame.new(side * 2.4, 4.3, -10.1), Enum.Material.Neon, Color3.fromRGB(255, 240, 180), jeep)
-        decor("Stripe", Vector3.new(0.2, 0.8, 14), cf * CFrame.new(side * 3.55, 4.4, 3), Enum.Material.SmoothPlastic, Color3.fromRGB(255, 210, 40), jeep)
-        decor("SideWindows", Vector3.new(0.2, 1.6, 12), cf * CFrame.new(side * 3.55, 6.6, 3), Enum.Material.Glass, Color3.fromRGB(30, 35, 40), jeep)
-        decor("HoodHorse", Vector3.new(0.3, 1.2, 0.8), cf * CFrame.new(side * 1.6, 5.9, -8.5), Enum.Material.Metal, chrome, jeep)
-        for _, z in { -7, 7 } do
-            createPart("Wheel", Vector3.new(1.4, 3.2, 3.2), cf * CFrame.new(side * 3.6, 1.6, z),
-                Enum.Material.SmoothPlastic, Color3.fromRGB(25, 25, 25), jeep).Shape = Enum.PartType.Cylinder
-        end
-    end
-    decor("RearStep", Vector3.new(5, 0.4, 1.2), cf * CFrame.new(0, 1.6, 10.6), Enum.Material.DiamondPlate, chrome, jeep)
-
-    -- Route sign above the windshield
-    local sign = decor("RouteSign", Vector3.new(6.4, 1.2, 0.3), cf * CFrame.new(0, 9.4, -8.6), Enum.Material.SmoothPlastic, Color3.fromRGB(250, 250, 245), jeep)
-    local gui = Instance.new("SurfaceGui")
-    gui.Face = Enum.NormalId.Front
-    gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
-    gui.PixelsPerStud = 40
-    local label = Instance.new("TextLabel")
-    label.Size = UDim2.fromScale(1, 1)
-    label.BackgroundTransparency = 1
-    label.Font = Enum.Font.GothamBlack
-    label.TextScaled = true
-    label.TextColor3 = Color3.fromRGB(200, 30, 30)
-    label.Text = routeText or "BACLARAN - KANTO"
-    label.Parent = gui
-    gui.Parent = sign
-
-    jeep.Parent = parent
-    return jeep
-end
-
 -- Barangay welcome arch spanning a street. `cf` = ground center, LookVector = side the text faces.
 function FilipinoStreetEnvironment.BuildBarangayArch(parent: Instance, cf: CFrame, span: number, text: string): Model
     local arch = Instance.new("Model")
@@ -598,6 +552,186 @@ function FilipinoStreetEnvironment.BuildBarangayArch(parent: Instance, cf: CFram
 
     arch.Parent = parent
     return arch
+end
+
+-- Barangay covered court (hub). `cf` = the court's center on the ground; local +Z points at the entrance end
+-- (the tarpaulin side). Painted floor: two half-court decals from tools/blender/court_texture.py (`texture`; a
+-- Top-face decal's image top points at the part's +Z, so each half is turned to put the center line at the middle), a hoop at each end, steel columns with arched trusses under a GI-sheet roof,
+-- hanging floodlights, and a tarpaulin over the entrance.
+local COURT_W, COURT_HALF, COURT_BORDER = 47, 44, 3
+local ROOF_HALF_SPAN, ROOF_EAVE, ROOF_CROWN = 36, 24, 34
+local STEEL = Color3.fromRGB(35, 75, 150)
+local CHALK = Color3.fromRGB(240, 239, 233)
+
+-- Thin part from a to b (world points): truss members, rims, nets.
+local function beam(name: string, a: Vector3, b: Vector3, thick: number, material: Enum.Material, color: Color3, parent: Instance): Part
+    local length = (b - a).Magnitude
+    return createPart(name, Vector3.new(thick, thick, length), CFrame.lookAt(a, b) * CFrame.new(0, 0, -length / 2), material, color, parent, false)
+end
+
+local function surfaceText(part: BasePart, face: Enum.NormalId, pps: number): SurfaceGui
+    local gui = Instance.new("SurfaceGui")
+    gui.Face = face
+    gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+    gui.PixelsPerStud = pps
+    gui.LightInfluence = 1
+    gui.Parent = part
+    return gui
+end
+
+local function label(gui: Instance, text: string, font: Font, color: Color3, y: number, h: number): TextLabel
+    local l = Instance.new("TextLabel")
+    l.BackgroundTransparency = 1
+    l.Position = UDim2.fromScale(0.04, y)
+    l.Size = UDim2.fromScale(0.92, h)
+    l.FontFace = font
+    l.TextScaled = true
+    l.TextColor3 = color
+    l.Text = text
+    l.Parent = gui
+    return l
+end
+
+local SARPANCH = Font.new("rbxasset://fonts/families/Sarpanch.json", Enum.FontWeight.Heavy)
+local TITILLIUM = Font.new("rbxasset://fonts/families/TitilliumWeb.json", Enum.FontWeight.SemiBold)
+
+local function buildHoop(court: Model, endCf: CFrame) -- endCf: on the baseline, local +Z pointing out of the court
+    local white = Color3.fromRGB(245, 245, 240)
+    createPart("HoopPost", Vector3.new(1, 13, 1), endCf * CFrame.new(0, 6.5, 3.5), Enum.Material.Metal, STEEL, court)
+    createPart("PostPad", Vector3.new(1.6, 5, 1.6), endCf * CFrame.new(0, 2.5, 3.5), Enum.Material.Fabric, Color3.fromRGB(200, 50, 50), court, false)
+    createPart("HoopArm", Vector3.new(0.6, 0.6, 7.6), endCf * CFrame.new(0, 12.4, -0.3), Enum.Material.Metal, STEEL, court, false)
+    beam("HoopBrace", endCf:PointToWorldSpace(Vector3.new(0, 8.5, 3.5)), endCf:PointToWorldSpace(Vector3.new(0, 12.4, -0.5)), 0.4, Enum.Material.Metal, STEEL, court)
+
+    local board = createPart("Backboard", Vector3.new(5.6, 3.3, 0.25), endCf * CFrame.new(0, 10.65, -3.75), Enum.Material.SmoothPlastic, white, court)
+    local red = Color3.fromRGB(200, 40, 40)
+    for _, p in { { 0, 11.37, 1.9, 0.15 }, { 0, 9.97, 1.9, 0.15 }, { -0.95, 10.67, 0.15, 1.4 }, { 0.95, 10.67, 0.15, 1.4 } } do
+        decor("BoardMark", Vector3.new(p[3], p[4], 0.05), endCf * CFrame.new(p[1], p[2], -3.9), Enum.Material.SmoothPlastic, red, court)
+    end
+    local gui = surfaceText(board, Enum.NormalId.Front, 40)
+    label(gui, "BRGY. PATINTERO", SARPANCH, red, 0.04, 0.2)
+
+    local rim = endCf * CFrame.new(0, 9.5, -4.6)
+    local orange = Color3.fromRGB(235, 100, 30)
+    decor("RimBracket", Vector3.new(0.3, 0.12, 0.6), endCf * CFrame.new(0, 9.5, -4.05), Enum.Material.Metal, orange, court)
+    local function ringPoint(i: number, r: number, y: number): Vector3
+        local a = i / 12 * math.pi * 2
+        return rim:PointToWorldSpace(Vector3.new(math.cos(a) * r, y, math.sin(a) * r))
+    end
+    for i = 0, 11 do
+        beam("Rim", ringPoint(i, 0.75, 0), ringPoint(i + 1, 0.75, 0), 0.12, Enum.Material.Metal, orange, court)
+        if i % 2 == 0 then
+            beam("Net", ringPoint(i, 0.75, 0), ringPoint(i + 1, 0.45, -1.3), 0.06, Enum.Material.Fabric, white, court)
+            beam("Net", ringPoint(i + 1, 0.75, 0), ringPoint(i, 0.45, -1.3), 0.06, Enum.Material.Fabric, white, court)
+        end
+    end
+end
+
+function FilipinoStreetEnvironment.BuildCoveredCourt(parent: Instance, cf: CFrame, texture: string): Model
+    local court = Instance.new("Model")
+    court.Name = "CoveredCourt"
+    local halfW, halfL = COURT_W / 2 + COURT_BORDER, COURT_HALF + COURT_BORDER
+
+    for _, dir in { -1, 1 } do
+        local half = createPart("Floor", Vector3.new(halfW * 2, 0.4, halfL), cf * CFrame.new(0, 0.2, dir * halfL / 2)
+            * CFrame.Angles(0, if dir == 1 then math.pi else 0, 0), Enum.Material.Concrete, Color3.fromRGB(150, 40, 44), court)
+        local decal = Instance.new("Decal")
+        decal.Face = Enum.NormalId.Top
+        decal.Texture = texture
+        decal.Parent = half
+        buildHoop(court, cf * CFrame.new(0, 0, dir * COURT_HALF) * CFrame.Angles(0, if dir == 1 then 0 else math.pi, 0))
+    end
+    -- A Top-face SurfaceGui runs along the part's Z: the name lies along the court, read from a sideline
+    local seal = createPart("CenterName", Vector3.new(3.6, 0.05, 16), cf * CFrame.new(0, 0.43, 0), Enum.Material.SmoothPlastic, CHALK, court, false)
+    seal.Transparency = 1
+    label(surfaceText(seal, Enum.NormalId.Top, 40), "BRGY. PATINTERO", SARPANCH, CHALK, 0, 1)
+
+    -- Roof: GI sheets on a shallow arch from eave to eave, carried by trusses on steel columns every 16 studs
+    local sag = ROOF_CROWN - ROOF_EAVE
+    local radius = (ROOF_HALF_SPAN ^ 2 + sag ^ 2) / (2 * sag)
+    local centerY = ROOF_CROWN - radius
+    local maxAngle = math.asin(ROOF_HALF_SPAN / radius)
+    local function arc(t: number, drop: number): Vector3 -- t: -1..1 across the span
+        local a = t * maxAngle
+        return Vector3.new(math.sin(a) * (radius - drop), centerY + math.cos(a) * (radius - drop), 0)
+    end
+    local roofLen, panels = halfL * 2 + 10, 12
+    for i = 0, panels - 1 do
+        local a, b = arc(-1 + 2 * i / panels, 0), arc(-1 + 2 * (i + 1) / panels, 0)
+        local d = b - a
+        createPart("RoofSheet", Vector3.new(d.Magnitude + 0.1, 0.25, roofLen), cf * CFrame.new((a + b) / 2) * CFrame.Angles(0, 0, math.atan2(d.Y, d.X)),
+            Enum.Material.CorrodedMetal, Color3.fromRGB(86, 124, 160), court, false)
+    end
+    for k = -3, 3 do
+        local line = cf * CFrame.new(0, 0, k * 16)
+        for _, x in { -ROOF_HALF_SPAN, ROOF_HALF_SPAN } do
+            createPart("Column", Vector3.new(1.2, ROOF_EAVE, 1.2), line * CFrame.new(x, ROOF_EAVE / 2, 0), Enum.Material.Metal, STEEL, court)
+        end
+        beam("TieBeam", line:PointToWorldSpace(Vector3.new(-ROOF_HALF_SPAN, ROOF_EAVE, 0)), line:PointToWorldSpace(Vector3.new(ROOF_HALF_SPAN, ROOF_EAVE, 0)),
+            0.6, Enum.Material.Metal, STEEL, court)
+        for i = 0, panels - 1 do
+            beam("Chord", line:PointToWorldSpace(arc(-1 + 2 * i / panels, 0.5)), line:PointToWorldSpace(arc(-1 + 2 * (i + 1) / panels, 0.5)),
+                0.5, Enum.Material.Metal, STEEL, court)
+        end
+        for i = 1, panels - 1, 2 do
+            local top = arc(-1 + 2 * i / panels, 0.5)
+            beam("Strut", line:PointToWorldSpace(Vector3.new(top.X, ROOF_EAVE, 0)), line:PointToWorldSpace(top), 0.3, Enum.Material.Metal, STEEL, court)
+        end
+        if k % 3 == 0 then -- floodlights hang from every third truss, over each half of the court
+            for _, x in { -12, 12 } do
+                decor("LampCord", Vector3.new(0.1, 1.2, 0.1), line * CFrame.new(x, ROOF_EAVE - 0.6, 0), Enum.Material.SmoothPlastic, Color3.fromRGB(20, 20, 20), court)
+                local lamp = decor("Floodlight", Vector3.new(2.2, 0.5, 1.2), line * CFrame.new(x, ROOF_EAVE - 1.4, 0), Enum.Material.SmoothPlastic, Color3.fromRGB(225, 222, 210), court)
+                local light = Instance.new("SpotLight")
+                light.Face = Enum.NormalId.Bottom
+                light.Angle = 110
+                light.Range = 40
+                light.Brightness = 2.2
+                light.Color = Color3.fromRGB(255, 236, 205)
+                light.Parent = lamp
+            end
+        end
+    end
+
+    -- Tarpaulin over the entrance (Back face = local +Z, the street side)
+    local tarp = createPart("Tarpaulin", Vector3.new(34, 6, 0.1), cf * CFrame.new(0, ROOF_EAVE + 3.4, 3 * 16 + 0.4), Enum.Material.Fabric, Color3.fromRGB(248, 246, 238), court, false)
+    local gui = surfaceText(tarp, Enum.NormalId.Back, 24)
+    for _, stripe in { { 0, Color3.fromRGB(200, 40, 40) }, { 0.88, Color3.fromRGB(35, 75, 170) } } do
+        local band = Instance.new("Frame")
+        band.BorderSizePixel = 0
+        band.Position = UDim2.fromScale(0, stripe[1])
+        band.Size = UDim2.fromScale(1, 0.12)
+        band.BackgroundColor3 = stripe[2]
+        band.Parent = gui
+    end
+    label(gui, "BARANGAY PATINTERO", SARPANCH, Color3.fromRGB(200, 40, 40), 0.16, 0.38)
+    label(gui, "COVERED COURT", SARPANCH, Color3.fromRGB(35, 75, 170), 0.52, 0.2)
+    label(gui, "Proyekto ng Sangguniang Barangay", TITILLIUM, Color3.fromRGB(40, 40, 45), 0.73, 0.13)
+
+    FilipinoStreetEnvironment.OptimizeDecor(court)
+    court.Parent = parent
+    return court
+end
+
+-- Concrete court bleachers. `cf` = the middle of the front edge on the ground, LookVector toward the court;
+-- `tiers` steps (2.4 deep, 1.9 rise, first seat at 1.7), every riser painted `paint`. Seats are added by HubService.
+function FilipinoStreetEnvironment.BuildCourtBleachers(parent: Instance, cf: CFrame, length: number, tiers: number, paint: Color3): Model
+    local m = Instance.new("Model")
+    m.Name = "Bleachers"
+    local depth = tiers * 2.4
+    for i = 1, tiers do
+        local top = 1.7 + (i - 1) * 1.9
+        local front = (i - 1) * 2.4
+        createPart(`Tier{i}`, Vector3.new(length, top, depth - front), cf * CFrame.new(0, top / 2, (front + depth) / 2), Enum.Material.Concrete, Color3.fromRGB(150, 145, 138), m)
+        decor("Riser", Vector3.new(length, 0.6, 0.05), cf * CFrame.new(0, top - 0.4, front - 0.03), Enum.Material.SmoothPlastic, paint, m)
+    end
+    local railY = 1.7 + (tiers - 1) * 1.9 + 1.1
+    createPart("Rail", Vector3.new(length, 0.25, 0.25), cf * CFrame.new(0, railY, depth - 0.2), Enum.Material.Metal, paint, m, false)
+    local posts = math.max(1, math.round(length / 8))
+    for j = 0, posts do
+        createPart("RailPost", Vector3.new(0.25, 1.1, 0.25), cf * CFrame.new(-length / 2 + j * length / posts, railY - 0.55, depth - 0.2),
+            Enum.Material.Metal, paint, m, false)
+    end
+    m.Parent = parent
+    return m
 end
 
 return FilipinoStreetEnvironment

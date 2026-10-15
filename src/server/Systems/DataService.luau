@@ -1,8 +1,10 @@
 --!strict
 --[[
     DataService.luau
-    Loads and saves each player's Spins + Style (players keep exactly one style). The live values are
-    the Player attributes `Spins` and `Style` (owned by StyleService); this service only persists them.
+    Loads and saves each player's Spins + Style (players keep exactly one style), XP and TutorialDone (finished
+    the tutorial or a match). The live values are the Player attributes `Spins`, `Style` (owned by StyleService),
+    `XP` (ProgressionService) and `TutorialDone` (TutorialService / MatchService); this service only persists them. The first join of
+    each UTC day adds Config.Progression.DailySpins.
     shortcut: no session locking (last write wins across servers); move to ProfileStore if trading/paid spins are added.
 ]]
 
@@ -21,6 +23,8 @@ local saveable: { [Player]: boolean } = {}
 -- Players saved right before a teleport. Later saves are skipped so a slow save from this server
 -- can't land after the destination server has already loaded newer data.
 local released: { [Player]: boolean } = {}
+-- UTC day number of the last daily-spin grant
+local dailyDay: { [Player]: number } = {}
 
 local function keyFor(player: Player): string
     return `u_{player.UserId}`
@@ -43,6 +47,9 @@ end
 local function load(player: Player)
     local spins = Config.Styles.StartingSpins
     local style = Config.Styles.DefaultStyle
+    local xp = 0
+    local lastDaily = 0
+    local tutorialDone = false
 
     local ok, data = false, nil
     if store then
@@ -60,6 +67,21 @@ local function load(player: Player)
         if Styles.Exists(data.style) then
             style = data.style
         end
+        local savedXp = data.xp
+        if typeof(savedXp) == "number" and savedXp == savedXp and savedXp >= 0 and savedXp < 1e9 then
+            xp = math.floor(savedXp)
+        end
+        if typeof(data.lastDaily) == "number" then
+            lastDaily = data.lastDaily
+        end
+        tutorialDone = data.tutorialDone == true or data.seenGuide == true -- seenGuide: the earlier name
+    end
+
+    -- Daily spins only on a real load, so a DataStore outage can't hand them out again and again
+    local today = math.floor(os.time() / 86400)
+    if ok and today > lastDaily then
+        spins += Config.Progression.DailySpins
+        lastDaily = today
     end
 
     if not player.Parent then return end
@@ -67,8 +89,12 @@ local function load(player: Player)
     if not ok then
         warn(`[DataService] Using unsaved defaults for {player.Name} (DataStore unavailable; enable Studio API access to test saving)`)
     end
+    dailyDay[player] = lastDaily
     player:SetAttribute("Spins", spins)
     player:SetAttribute("Style", style)
+    -- Unknown data (load failed) counts as done, so a DataStore outage doesn't send everyone to the tutorial
+    player:SetAttribute("TutorialDone", tutorialDone or not ok)
+    player:SetAttribute("XP", xp)
 end
 
 local function save(player: Player)
@@ -78,6 +104,9 @@ local function save(player: Player)
     local data = {
         spins = player:GetAttribute("Spins"),
         style = player:GetAttribute("Style"),
+        xp = player:GetAttribute("XP"),
+        lastDaily = dailyDay[player],
+        tutorialDone = player:GetAttribute("TutorialDone") == true,
     }
     withRetries(`save {player.UserId}`, function()
         return ds:UpdateAsync(keyFor(player), function()
@@ -130,6 +159,7 @@ function DataService.Init()
         save(player)
         saveable[player] = nil
         released[player] = nil
+        dailyDay[player] = nil
     end)
 
     game:BindToClose(function()

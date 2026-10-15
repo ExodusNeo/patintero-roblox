@@ -34,6 +34,7 @@ local TEX = {
     Sparks = "rbxasset://textures/particles/fire_sparks_main.dds",
     Vortex = "rbxasset://textures/particles/forcefield_vortex_main.dds",
 }
+SkillEffects.TEX = TEX
 
 local WHITE = Color3.new(1, 1, 1)
 local THEME: { [string]: Color3 } = {

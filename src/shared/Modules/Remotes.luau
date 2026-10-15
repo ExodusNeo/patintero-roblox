@@ -21,10 +21,13 @@ local REMOTE_DEFINITIONS = {
         UseSkill = "RemoteEvent", -- client -> server: (slot)
         SkillCast = "RemoteEvent", -- server -> all: (casterUserId, styleId, slot, position)
         SwitchLine = "RemoteEvent", -- client -> server: guard hops to the next free line
+        PasserRevived = "RemoteEvent", -- server -> all: (revivedUserId, revivedName, byName) a Tubig brought a teammate back
+        LevelUp = "RemoteEvent", -- server -> player: (newLevel)
+        TutorialStep = "RemoteEvent", -- server -> player: (step, total, title, hint) first-time tutorial
+        -- client -> server -> others: ("Slide", position[, userId]). Reliable: other clients pose the slide from it
+        CosmeticAction = "RemoteEvent",
     },
-    UnreliableEvents = {
-        CosmeticAction = "UnreliableRemoteEvent",
-    },
+    UnreliableEvents = {},
     Functions = {
         GetInitialMatchData = "RemoteFunction",
         Spin = "RemoteFunction", -- client -> server, returns rolled style id or nil

@@ -24,9 +24,18 @@ rollable **Styles** (rarity-weighted, each with a passive + two skills) in the s
   - Read/edit: `script_read`, `multi_edit` (also creates scripts — pass `className`).
   - Run/verify: `execute_luau` (Edit/Server/Client), `start_stop_play`, `get_console_output`, `screen_capture`.
 - `src/` + `default.project.json` are a **Rojo mirror for git only**. It may lag Studio.
-  Before committing, sync Studio → `src/`: run `node tools/sync-receiver.js .` in the background, then
-  `execute_luau` (Edit) the contents of `tools/studio-sync-sender.luau`; review `git diff`, commit.
-  (Deleted scripts are not removed from `src/` by the sync — delete those files by hand.)
+- **After every change the user asks for (mandatory, without being asked), sync and rebuild the vault:**
+  1. Sync Studio → `src/`: run `node tools/sync-receiver.js .` in the background, then `execute_luau` (Edit)
+     the contents of `tools/studio-sync-sender.luau`. The receiver only rewrites files whose source changed.
+     Deleted scripts are not removed from `src/` by the sync — delete those files by hand.
+  2. Rebuild the code graph and Obsidian vault from the repo root: `graphify update .` then
+     `graphify export obsidian` (vault: `graphify-out/obsidian/`, local only, not committed).
+  3. Update `HANDOFF.md` (*Current state* and *Next steps*: what changed, what is uncommitted, open items),
+     so a new conversation can pick up from it.
+  4. Review `git diff`, then open a pull request for the change (the user asked for a PR per change, so this
+     needs no extra request): commit on a `feat/<topic>` or `fix/<topic>` branch made from an up-to-date `main`
+     (Conventional Commits), push the branch, and open a PR to `main` with `gh`. If that branch's PR is still
+     open, push to it instead; if it was merged, start a new branch. Never push to `main`; the user merges PRs.
   Never `rojo serve` over Studio without syncing first.
 - Edits only persist when the user saves the place in Studio (Ctrl+S / publish). Remind them after big changes.
 - Verify every gameplay change with a playtest: `start_stop_play` → `get_console_output` → stop.
@@ -51,6 +60,23 @@ rollable **Styles** (rarity-weighted, each with a passive + two skills) in the s
 - **Effect sprites** come from `tools/blender/fx_textures.py` (white-on-transparent PNGs in `assets/fx/`),
   uploaded with the Studio MCP `upload_image` tool (serve `assets/fx` on localhost); the ids live in
   `SkillEffects.TEX`. Re-upload and update the ids if a sprite changes.
+- **Hub props (Sketchfab)**: `tools/blender/hub_props.py` (run in Blender with the Sketchfab add-on logged in;
+  its token is reused, never stored) downloads the `PROPS` list (CC Attribution or CC0 only: no NonCommercial,
+  NoDerivatives or Sketchfab Standard), scales them to studs (1 m = 3.2 studs), origins at the bottom center,
+  decimates the heavy ones, caps textures at 1024 and splits each prop by material (Roblox gives a MeshPart one
+  texture): an Empty `Prop_<Key>` holding `Prop_<Key>_<n>` meshes, exported as `assets/models/HubProps.fbx`, plus
+  `HubProps_colors.json` (base colors of untextured parts). Roblox can't take a Blender file directly: the owner
+  imports the FBX once (File → Import 3D), then the templates live in `ServerStorage.HubProps` (untextured parts
+  colored from the JSON) and `HubStreet.Dress` places copies. Every model is credited in `CREDITS.md`; paste that
+  list into the game description (CC BY requires attribution).
+- **Court floor** (hub): `tools/blender/court_texture.py` paints one half court on worn concrete (green court,
+  red key and border, white lines, FIBA layout scaled to studs) into `assets/court/court_half.png`; both floor
+  halves use it (`HubService.COURT_TEXTURE`; each half turned so the image top, the center line, meets in the middle). From Cowork, Blender can serve the
+  repo on localhost (a threaded `http.server`) for `upload_image` and for pulling `src/` files into Studio.
+- **Previewing a Studio build** when Studio's viewport can't be captured (window in the background):
+  `tools/blender/preview_hub.py` rebuilds BaseParts that Studio POSTs as JSON (see its header) in a `HubPreview`
+  scene and renders camera shots given in Roblox coordinates. It doesn't draw SurfaceGuis. (Checked in Studio: a
+  Top-face Decal's image top points at the part's +Z, and a Top-face SurfaceGui's width runs along the part's Z.)
 - **UI art ("Kanto Night")** is the hand-drawn art of the Figma file "Patintero UI" (Direction B): chalk
   strokes, key boxes, torn patches, paint plates, the streetlamp light. The Figma SVGs live in
   `assets/ui/kanto/src/`; `python tools/ui_kanto.py` turns them into white, tintable PNGs in `assets/ui/kanto/`
@@ -67,14 +93,17 @@ rollable **Styles** (rarity-weighted, each with a passive + two skills) in the s
   `Workspace.PatinteroCourt` + court `SpawnLocation`).
 - After every change: publish to the Hub place **and** "Publish to Roblox As…" the Match place.
 - Studio playtests default to the hub. To test the court, set Workspace attribute
-  `StudioMode = "Match"` (clear it afterwards). Teleports never work in Studio; test them live.
+  `StudioMode = "Match"` (clear it afterwards), or `"Tutorial"` for the first-time tutorial. Teleports never
+  work in Studio; test them live.
 - Match place Access setting should be *Secure within universe only* (Creator Dashboard).
 
 ## 2. Cost discipline (plugins)
 
-- **ponytail** plugin is on for this project: smallest complete change, reuse before writing,
-  no speculative abstractions. Use `/ponytail-review` before committing and `/ponytail-debt`
-  to list `shortcut:` comments.
+- **Always use ponytail** on this project (load the `ponytail:ponytail` skill at the start of every task):
+  smallest complete change, reuse before writing, no speculative abstractions. Use `/ponytail-review`
+  before committing and `/ponytail-debt` to list `shortcut:` comments.
+- **Always reply in caveman ultra.** It is user-invoked only (agents can't load it): if it isn't active at the
+  start of a session, ask the user to run `/caveman ultra`.
 - Read only the scripts a change touches; prefer `script_grep` over reading whole files.
 - Don't re-read a script you just edited.
 
@@ -112,9 +141,14 @@ only new systems. If several rows match, load all of them. If none match, say so
   Client-side prediction is fine for the caster's own movement (dash/blink); anything that
   affects other players or scoring is decided on the server.
 - Runtime state the client renders goes on attributes:
-  - Player: `Spins` (number), `Style` (style id), `Team` (current role), `Side` (`Red`/`Blue` match team), `Teleporting`.
-  - Character: `HasteMult`, `SlowMult`, `ReachBonus`, `TagImmune` (timed, set by `StyleService`).
-- Clean up connections on character removal; use `UnreliableRemoteEvent` for cosmetics.
+  - Player: `Spins` (number), `Style` (style id), `Team` (current role), `Side` (`Red`/`Blue` match team), `Teleporting`,
+    `Tagged` (out this round), `XP` / `Level` (`ProgressionService`), `TutorialDone` (finished the tutorial or a match; saved,
+    the old data key `seenGuide` still counts).
+  - Character: `HasteMult`, `SlowMult`, `ReachBonus`, `TagImmune` (timed, set by `StyleService`);
+    `SeatWalk` (Vector3, hub: the point `HubService` is walking you to on the way to a lobby seat).
+- Clean up connections on character removal; use `UnreliableRemoteEvent` for frequent cosmetics. Exception:
+  `CosmeticAction` (slides) is a reliable `RemoteEvent` because other clients pose the slide from it; the
+  server only relays `"Slide"`, at most once per `0.8 × SlideCooldown`, within 30 studs of the sender.
 - Commits: Conventional Commits (`feat(scope): …`, `fix(scope): …`), one per finished system.
 
 ---
@@ -122,15 +156,47 @@ only new systems. If several rows match, load all of them. If none match, say so
 ## 5. Game design
 
 ### Hub (third person)
-- A Filipino barangay street (`HubService.BuildHub`, saved as `Workspace.Hub`): welcome arch
-  "Maligayang Pagdating sa Barangay Patintero" between spawn and pads, house rows, sari-sari store
-  with a parked jeepney, utility poles, banderitas, invisible boundary walls.
-- Four queue pads on the road (2×2 grid) need 2 / 4 / 6 / 8 players (`PadSize` attribute on parts in
-  `Workspace.Hub.Pads`; add or move pads freely). A full pad counts down (`Config.Hub.CountdownTime`),
-  cancelled if anyone steps off, then `HubService` reserves a match server and `TravelService`
-  teleports the group.
-- **Owner test pad** (`Workspace.Hub.Pads.PadTest`, beside the spawn): `PadSize` 1 + `OwnerOnly`
-  attribute, so only the game's owner (`game.CreatorId`; anyone in Studio) can queue on it. It lets the
+- A Filipino barangay street at dusk (`HubService.BuildHub` + `HubStreet`, saved as `Workspace.Hub`): welcome
+  arch "Maligayang Pagdating sa Barangay Patintero" past the spawn (two uplights on the sign); houses with a grime
+  band, grilled windows (some lit), wall lamps, balconies with laundry and hand-painted signs ("BAWAL UMIHI
+  DITO!", ...); Aling Nena's sari-sari store in its own gap in the right-hand row (grilled storefront, counter,
+  lit shelves, awning with snack strips, painted sign); concrete poles with sodium streetlamps, spaghetti wires,
+  service drops and banderitas, all past the arch (poles at z = -28 / 22 / 72); patched asphalt,
+  manholes and a painted speed hump; gutters with grates, yellow/white curbs; invisible boundary walls and an
+  invisible spawn. Houses, the store and the road carry `PropSpot` attachments (`Kind`: Meter, Aircon, Plant,
+  Drum, Bin, LPG, Monobloc, TableSet, Jeepney, Tricycle) where `HubStreet.Dress` puts the imported props (anchored,
+  scaled to their height, bottom on the spot; vehicles parked on the right-hand side of their lane).
+  `HubStreet.SetupNightLighting` runs on hub start (blue hour, cool ambient, haze, bloom); the match keeps its
+  golden hour. The far end opens onto a plaza with the
+  **barangay covered court** (`HubService.BuildCourtPlaza`, model `CourtPlaza`): painted court floor, a hoop at
+  each end, steel columns and arched trusses under a GI-sheet roof, floodlights, a "BARANGAY PATINTERO COVERED
+  COURT" tarpaulin over the entrance, and concrete bleachers along both sidelines (Red risers on one, Blue on
+  the other; `FilipinoStreetEnvironment.BuildCoveredCourt` / `BuildCourtBleachers`).
+- **Lobby** = one 4 V 4 bleacher section pair in the middle of the bleachers (`Config.Hub.PadSizes = { 8 }`; one
+  lobby so the few players online gather in one place; `BuildCourtPlaza` lays out a pair per size):
+  each has a Red section on one sideline facing its Blue section straight across the court, with half the
+  lobby's seats each. Each section is a zone part in `Workspace.Hub.Pads` (attributes `PadSize`, `Lobby`, `Side`,
+  `Title`; its `Seat`s are children) with a chalk box on the floor, the name on the riser and a sign. When every
+  seat of a lobby is taken it counts down (`Config.Hub.CountdownTime`), cancelled if anyone stands up, then
+  `HubService` reserves a match server and `TravelService` teleports the group. **The side you sit on is your
+  team**: the teleport data carries `sides` (userId → `Red`/`Blue`) and `MatchService.assignTeams` keeps it.
+  **Short-handed start**: a lobby that isn't full starts its countdown anyway once `Config.Hub.MinToStart` (2)
+  players have sat there for `Config.Hub.FillTimeout` (30 s); the sign shows `n/size · Ns` while it waits, and
+  `assignTeams` evens out the sides.
+- **Weekly TUBIG board** (`HubService.buildLeaderboard` + `LeaderboardService`, model `Workspace.Hub.WeeklyBoard`,
+  built at runtime beside the spawn): top `Config.Hub.LeaderboardSize` Tubig scorers this week (Monday 00:00 UTC),
+  from the OrderedDataStore `Config.Data.WeeklyTubigStore` (scope = week number), refreshed every
+  `LeaderboardRefresh` s. Matches add each Tubig (`LeaderboardService.RecordTubig`; never from Studio).
+- **Lobby seats** (`HubService.updateSeats`): stepping into a section's zone hands you the nearest free seat on
+  that side (a full side leaves you standing; walk to the other one); your avatar walks there on its own (character attribute `SeatWalk`; `MovementController` calls
+  `MoveTo` every frame instead of feeding your input, and blocks jumping) and sits within `SIT_RANGE` of the walk
+  target or the seat, or is snapped in after `WALK_TIMEOUT`. (The game runs Roblox's native controls: there is
+  no `PlayerScripts.PlayerModule` to disable.)
+  Only seated players count toward the lobby. Jumping out of the seat leaves the queue, and you aren't seated
+  in that lobby again until you step out of its zones. Seats have `CanTouch` off (only the queue seats people).
+  No glow anywhere: lobbies are marked by chalk, the riser name and the sign.
+- **Owner test bleacher** (`Workspace.Hub.Pads.PadTestRed`, beside the spawn): a one-seat Red section with `PadSize`
+  1 + `OwnerOnly`, so only the game's owner (`game.CreatorId`; anyone in Studio) can queue on it. It lets the
   owner run the full hub → match → hub loop alone in the live game; the match server starts with
   `min(MinPlayersToStart, expectedPlayers)` players.
 - Spinning for Styles happens **only in the hub**. Skills (Q/E) can be tried in the hub.
@@ -162,17 +228,37 @@ only new systems. If several rows match, load all of them. If none match, say so
 - The match server waits for the party the hub sent (`expectedPlayers` teleport data) and until no
   one has joined for `Config.Match.JoinSettleTime` (max `ArrivalTimeout`), plays 2 rounds, then
   teleports everyone back to the hub. Players who arrive after teams are set spectate.
-- Two teams per match, **Red** and **Blue** (player attribute `Side`, assigned at match start): Red starts
-  as Passers, Blue as Guards, and they swap roles for round 2. Every point (zone advance, Tubig, tag) goes
+- Two teams per match, **Red** and **Blue** (player attribute `Side`, assigned at match start from the hub
+  bleacher side each player sat on; anyone without one fills the smaller side, and a side more than one over
+  gives its extras away): Red starts as Passers, Blue as Guards, and they swap roles for round 2. Every point (zone advance, Tubig, tag) goes
   to the scorer's side, so the match winner is a team of players: the HUD shows `RED: x | BLUE: y`
   (your side underlined) and the match-over banner names the winning side (or a draw).
 - Guards are locked to chalk lines: `Line1`, `Line2`, `Line3` (across the court) and the
-  `Patotot` (center line along the court). They tag with click / F. A lone guard gets the mid line
+  `Patotot` (center line along the court; players see "the center line"). They tag with click / F. A lone guard gets the mid line
   (`Line2`); **line hop** (R / HOP) moves a guard to the next free line (`Config.Tagging.LineSwitchCooldown`).
 - Passers run Home → Zone 1 → Zone 2 → Safehouse (outbound, +1 per zone in order),
   then back to Home for **"TUBIG!"** (+5). Zones must be cleared in order (no farming).
-- A tagged Passer is out for the round and sent to the sideline. Round ends at time-out or when
-  all Passers are out.
+- A tagged Passer is out and sent to the sideline (player attribute `Tagged`), and watches an untagged teammate
+  in third person (`FirstPersonController` spectate) until back in. **A Tubig brings back one tagged teammate**
+  (`MatchService.reviveTeammate`: the first tagged Passer in roster order returns to Home with a fresh lap;
+  `PasserRevived` → "Back in" callout). Round ends at time-out or when all Passers are out.
+- **Movement check** (server): a Passer who covers more ground than `Config.Match.MaxRunSpeed` × time +
+  `MaxBurst` since the last 0.2 s check or over ~1 s is moved back to where they were and gets no zone progress
+  from that check (`MatchService.movedTooFast`; server teleports reset it). Zone order was already enforced.
+- **Progression** (`ProgressionService`, both places): XP for zones, Tubig, tags, each round played and a win
+  (`Config.Progression`); `Level = 1 + floor(sqrt(XP / XPLevelBase))`, shown in the player list (leaderstats)
+  with a "Level N" callout on level-up (`LevelUp`). **Daily spins**: the first join of each UTC day adds
+  `Config.Progression.DailySpins` (`DataService`).
+- **MVP**: at MatchOver the player with the most points this match is named under the winner callout
+  ("MVP name · N pts", `MatchState.mvpName`/`mvpPoints`).
+- **First-time tutorial** (`TutorialService`): a hub player whose `TutorialDone` loads false is sent alone to a
+  reserved match-place server (teleport data `tutorial = true`); there `MatchService` runs `TutorialService.Run`
+  instead of matches. Steps: Zone 1 (sprint), Zone 2 (slide past a guard), Safehouse, home for TUBIG, past two
+  dummy guards (arms wide, Blue shirts) patrolling Line1 and Line2; getting within 4.5 studs of one sends you home
+  to step 1. The HUD clock shows the step ("2/4"), the role line the objective (`TutorialStep`). Finishing sets
+  `TutorialDone` and returns you to the hub. A failed data load counts as done (no tutorial loop in an outage).
+- **Analytics funnel** `MatchLoop` (`FunnelService`): 1 Joined hub, 2 Sat in lobby, 3 Match started, 4 Match
+  finished, 5 Back in hub; the session id travels in teleport data (`funnels`).
 - Map: the court on a barangay street with house rows on all four sides (`CourtService.BuildNeighborhood`),
   poles, banderitas strung pole-to-pole, sari-sari store, hoop, walls; packed-earth ground.
 
@@ -206,15 +292,20 @@ only new systems. If several rows match, load all of them. If none match, say so
 - **Players keep exactly one style.** A spin replaces it; there is no collection and no way to
   re-equip an earlier style except rolling it again.
 - Rarities: Common 55%, Rare 30%, Epic 12%, Legendary 3% (see `Config.Styles`).
+- Players see English names; the ids (used in data, animations and effects) stay Filipino: Tsinelas = Quickstep,
+  Kanto = Streetwise, Bantay = Sentinel, Sipa = Leapfrog, Tumbang = Tin Can, Habagat = Typhoon, Anino = Phantom,
+  Bathala = Sovereign. Skills: "Sprint!" (was Takbo!), "Can Shock" (was Lata Shock). UI text stays English except
+  "Patintero" and the "TUBIG!" call; the street signs keep their Filipino as setting.
 - Spins: start with 10; +1 per round played, +1 per Tubig. Saved in DataStore with the Style.
 - Each Style = passive stat modifiers (speed, stamina, reach) + **Q** and **E** skills, each with its own
   custom animation and effects, plus a looping showcase idle (see *Style animations & effects*).
 - Skill kinds: `Dash`, `Blink`, `Haste`, `SecondWind`, `LongArm`, `Slow` (area, enemies only;
   `mult = 0` is a freeze), `Veil` (tag-immune + see-through). Roster lives in `Styles.luau`.
 
-### Environment builders — `FilipinoStreetEnvironment`
-- `BuildStreet`, `BuildHouseRow`, `BuildJeepney`, `BuildBarangayArch`, `BuildSariSariStore`,
-  `BuildUtilityPolesAndWires`, `BuildBanderitas` (share one pole layout), hoop, walls, lighting.
+### Environment builders — `FilipinoStreetEnvironment` (match court, shared pieces) and `HubStreet` (hub street)
+- `BuildStreet`, `BuildHouseRow`, `BuildBarangayArch`, `BuildSariSariStore`,
+  `BuildUtilityPolesAndWires`, `BuildBanderitas` (share one pole layout), hoop, walls, lighting,
+  `BuildCoveredCourt`, `BuildCourtBleachers`.
   Both maps are saved in the place; the builders only run when a map is missing (or by hand in edit mode).
 - `SetupGoldenHourLighting` (runs on every server start): sunset `ClockTime`, warm atmosphere, bloom,
   a warm `ColorCorrectionEffect` grade, sun rays, and `EnvironmentDiffuseScale = 0.45` so shade stays
@@ -222,8 +313,7 @@ only new systems. If several rows match, load all of them. If none match, say so
 - `OptimizeDecor(root)` runs on every built map (and was run on the saved ones): all map parts get
   `CanTouch = false`, non-solid decor gets `CanQuery = false` (flags/wires never block tag line of sight
   or Blink raycasts), parts under 1.5 studs get `CastShadow = false`. Run it after adding map pieces by hand.
-- Hub queue pads glow (a `PointLight` in the pad color) and emit rising sparkles (`HubService.decoratePad`).
-  Their signs are dressed at start (`HubService.dressSign`): torn dark patch, a chalk mark in the pad color,
+- Lobby signs are dressed at start (`HubService.dressSign`): torn dark patch, a chalk mark in the side's color,
   Sarpanch lettering.
 
 ### Style animations & effects (client) — `StyleAnimator`, `SkillEffects`, data in `StyleAnimations`
@@ -260,7 +350,8 @@ only new systems. If several rows match, load all of them. If none match, say so
 
 ### Presentation (client) — audio, VFX, HUD
 - **Audio** (`SoundController`, classic `Sound` + SoundGroups Master → SFX / UI / Ambience / Music; all ids
-  in `SOUND_CONFIGS`): hub-only acoustic music (`HubMusic`) under the street ambience; whistles for the
+  in `SOUND_CONFIGS`): hub-only acoustic music (`HubMusic`) under the street ambience; in the match a distant
+  neighborhood crowd loop (`MatchCrowd`) instead of music; a whoosh when your line hop lands (`TagController`); whistles for the
   countdown, round start and round end; clock ticks each second in a round's last 10 s; crowd cheer on
   Tubig and at match over; a heartbeat that fades in and quickens below ~35% stamina; UI clicks.
   3D one-shots play from an `Attachment` on Terrain.
@@ -272,6 +363,21 @@ only new systems. If several rows match, load all of them. If none match, say so
 - **Guard tag swipe** (`TagController`): a tag attempt plays the `Animate` script's `toolslash` animation on
   your own character (replicates, so everyone sees the swing); in first person your right arm is shown
   only while the swipe plays.
+- **Run wind** (`FirstPersonController`, match): thin wind streaks fly back past both sides of the view and a
+  wind loop (`RunWind`, `SoundController.UpdateRunWind`) rises in volume and pitch with horizontal speed (none
+  below ~14 studs/s, full at 30). The streaks are two invisible emitters riding in front of the camera.
+- **Body poses** (`BodyPose`, match, writes joint Transforms after the Animator like `StyleAnimator`):
+  - Role arms, every character on every client (nothing replicated): Passers pump their arms as they run
+    (elbows bent, each hand swinging in across the chest as it comes forward, scaled by speed); Guards hold
+    their arms wide at shoulder height, forearms bent in, blocking, leaning with the strafe. Steps aside while a
+    style animation or an Action-priority track (the tag swipe) plays.
+  - Slides: the body drops `BodyPose.SLIDE_DROP` studs (the first-person camera dips the same, same blend
+    rate), leans back, right leg out in front, left leg tucked, arms out for balance. Your own from
+    `FirstPersonController.SetSliding` → `BodyPose.SetSliding`; everyone else's from the reliable
+    `CosmeticAction` "Slide" relay (the server appends the slider's `UserId`), held for
+    `Config.Movement.SlideDuration`.
+  - First person shows your forearms and hands while posed and your legs + lower torso while sliding (upper
+    arms and torso stay hidden: they sit at the camera and would block the view).
 - **Tags** (`CourtVFXController`): the tagged Passer flashes red for everyone else; the tagger sees a red
   hit-marker ring pop around the crosshair (`HUDController`).
 - **HUD** (`HUDController`, laid out like the mockup): faint dark scrims at the top and bottom of the screen; a

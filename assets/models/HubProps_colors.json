@@ -1,0 +1,362 @@
+{
+ "Prop_Jeepney_1": {
+  "color": [
+   255,
+   255,
+   255
+  ],
+  "textured": false
+ },
+ "Prop_Tricycle_1": {
+  "color": [
+   202,
+   202,
+   202
+  ],
+  "textured": false
+ },
+ "Prop_Monobloc_1": {
+  "color": [
+   231,
+   231,
+   231
+  ],
+  "textured": true
+ },
+ "Prop_WaterDrum_1": {
+  "color": [
+   231,
+   231,
+   231
+  ],
+  "textured": true
+ },
+ "Prop_LPG_1": {
+  "color": [
+   231,
+   231,
+   231
+  ],
+  "textured": true
+ },
+ "Prop_Bin_1": {
+  "color": [
+   231,
+   231,
+   231
+  ],
+  "textured": true
+ },
+ "Prop_Plant_1": {
+  "color": [
+   231,
+   231,
+   231
+  ],
+  "textured": true
+ },
+ "Prop_Aircon_1": {
+  "color": [
+   231,
+   231,
+   231
+  ],
+  "textured": true
+ },
+ "Prop_Meter_1": {
+  "color": [
+   194,
+   195,
+   193
+  ],
+  "textured": false
+ },
+ "Prop_TableSet_1": {
+  "color": [
+   231,
+   231,
+   231
+  ],
+  "textured": true
+ },
+ "Prop_Jeepney_2": {
+  "color": [
+   255,
+   255,
+   255
+  ],
+  "textured": false
+ },
+ "Prop_Jeepney_3": {
+  "color": [
+   170,
+   170,
+   170
+  ],
+  "textured": false
+ },
+ "Prop_Jeepney_4": {
+  "color": [
+   231,
+   231,
+   231
+  ],
+  "textured": true
+ },
+ "Prop_Jeepney_5": {
+  "color": [
+   255,
+   0,
+   0
+  ],
+  "textured": false
+ },
+ "Prop_Jeepney_6": {
+  "color": [
+   0,
+   0,
+   0
+  ],
+  "textured": false
+ },
+ "Prop_Jeepney_7": {
+  "color": [
+   255,
+   173,
+   0
+  ],
+  "textured": false
+ },
+ "Prop_Jeepney_8": {
+  "color": [
+   255,
+   255,
+   255
+  ],
+  "textured": false
+ },
+ "Prop_Jeepney_9": {
+  "color": [
+   0,
+   158,
+   255
+  ],
+  "textured": false
+ },
+ "Prop_Jeepney_10": {
+  "color": [
+   231,
+   231,
+   231
+  ],
+  "textured": true
+ },
+ "Prop_Jeepney_11": {
+  "color": [
+   231,
+   231,
+   231
+  ],
+  "textured": true
+ },
+ "Prop_Jeepney_12": {
+  "color": [
+   231,
+   231,
+   231
+  ],
+  "textured": true
+ },
+ "Prop_Jeepney_13": {
+  "color": [
+   202,
+   202,
+   202
+  ],
+  "textured": false
+ },
+ "Prop_Jeepney_14": {
+  "color": [
+   231,
+   231,
+   231
+  ],
+  "textured": true
+ },
+ "Prop_Jeepney_15": {
+  "color": [
+   231,
+   231,
+   231
+  ],
+  "textured": true
+ },
+ "Prop_Jeepney_16": {
+  "color": [
+   255,
+   255,
+   255
+  ],
+  "textured": false
+ },
+ "Prop_Jeepney_17": {
+  "color": [
+   255,
+   255,
+   255
+  ],
+  "textured": false
+ },
+ "Prop_Tricycle_2": {
+  "color": [
+   59,
+   59,
+   59
+  ],
+  "textured": false
+ },
+ "Prop_Tricycle_3": {
+  "color": [
+   140,
+   140,
+   140
+  ],
+  "textured": false
+ },
+ "Prop_Tricycle_4": {
+  "color": [
+   224,
+   224,
+   224
+  ],
+  "textured": false
+ },
+ "Prop_Tricycle_5": {
+  "color": [
+   113,
+   79,
+   59
+  ],
+  "textured": false
+ },
+ "Prop_Tricycle_6": {
+  "color": [
+   249,
+   203,
+   138
+  ],
+  "textured": false
+ },
+ "Prop_Tricycle_7": {
+  "color": [
+   173,
+   150,
+   108
+  ],
+  "textured": false
+ },
+ "Prop_WaterDrum_2": {
+  "color": [
+   231,
+   231,
+   231
+  ],
+  "textured": true
+ },
+ "Prop_WaterDrum_3": {
+  "color": [
+   231,
+   231,
+   231
+  ],
+  "textured": true
+ },
+ "Prop_Bin_2": {
+  "color": [
+   231,
+   231,
+   231
+  ],
+  "textured": true
+ },
+ "Prop_Bin_3": {
+  "color": [
+   231,
+   231,
+   231
+  ],
+  "textured": true
+ },
+ "Prop_Bin_4": {
+  "color": [
+   231,
+   231,
+   231
+  ],
+  "textured": true
+ },
+ "Prop_Plant_2": {
+  "color": [
+   231,
+   231,
+   231
+  ],
+  "textured": true
+ },
+ "Prop_Plant_3": {
+  "color": [
+   231,
+   231,
+   231
+  ],
+  "textured": true
+ },
+ "Prop_Meter_2": {
+  "color": [
+   194,
+   195,
+   193
+  ],
+  "textured": false
+ },
+ "Prop_Meter_3": {
+  "color": [
+   25,
+   25,
+   25
+  ],
+  "textured": false
+ },
+ "Prop_TableSet_2": {
+  "color": [
+   231,
+   231,
+   231
+  ],
+  "textured": true
+ },
+ "Prop_TableSet_3": {
+  "color": [
+   231,
+   231,
+   231
+  ],
+  "textured": true
+ },
+ "Prop_TableSet_4": {
+  "color": [
+   231,
+   231,
+   231
+  ],
+  "textured": true
+ },
+ "Prop_TableSet_5": {
+  "color": [
+   231,
+   231,
+   231
+  ],
+  "textured": true
+ }
+}

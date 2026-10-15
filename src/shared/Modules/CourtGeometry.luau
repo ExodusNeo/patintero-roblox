@@ -47,7 +47,7 @@ local function buildLineDefinitions(): { [Types.GuardRole]: Types.LineDefinition
         },
         Patotot = {
             id = "Patotot",
-            name = "Center Patotot Line",
+            name = "Center Line", -- the "patotot" in the street game
             startPoint = Vector3.new(0, centerY, -halfLength),
             endPoint = Vector3.new(0, centerY, halfLength),
             width = court.LineThickness,

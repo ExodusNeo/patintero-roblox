@@ -50,6 +50,9 @@ export type MatchState = {
     redScore: number,
     blueScore: number,
     activePasserCount: number,
+    -- Set at MatchOver: the player who scored the most points this match
+    mvpName: string?,
+    mvpPoints: number?,
 }
 
 export type Rarity = "Common" | "Rare" | "Epic" | "Legendary"

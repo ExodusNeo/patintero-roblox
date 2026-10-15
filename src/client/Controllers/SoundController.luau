@@ -37,6 +37,7 @@ local SOUND_CONFIGS: { [string]: { id: string, volume: number, looped: boolean? 
     TubigFanfare = { id = "rbxassetid://9067124098", volume = 0.95 },
     CheckpointChime = { id = "rbxassetid://1301186018", volume = 0.75 },
     StreetAmbience = { id = "rbxassetid://108780908532387", volume = 0.35, looped = true },
+    MatchCrowd = { id = "rbxassetid://9112787259", volume = 0.3, looped = true }, -- Pro Sound Effects distant walla
     -- Skills
     DashWhoosh = { id = "rbxassetid://80984744279155", volume = 0.7 },
     BlinkZap = { id = "rbxassetid://111427631458884", volume = 0.6 },
@@ -47,6 +48,7 @@ local SOUND_CONFIGS: { [string]: { id: string, volume: number, looped: boolean? 
     RevealBoom = { id = "rbxassetid://94978851787238", volume = 0.8 },
     -- Match feel
     Heartbeat = { id = "rbxassetid://132163421525060", volume = 0.7, looped = true },
+    RunWind = { id = "rbxassetid://9114057128", volume = 0.6, looped = true }, -- Pro Sound Effects desert wind
     CrowdCheer = { id = "rbxassetid://126615573673174", volume = 0.6 },
     HubMusic = { id = "rbxassetid://1842663547", volume = 0.3, looped = true },
 }
@@ -55,6 +57,7 @@ local loadedSounds: { [string]: Sound } = {}
 local activeSlideSound: Sound? = nil
 local ambienceSound: Sound? = nil
 local heartbeatSound: Sound? = nil
+local windSound: Sound? = nil
 
 local function setupAudioBuses()
     masterGroup = Instance.new("SoundGroup")
@@ -84,7 +87,7 @@ local function setupAudioBuses()
 end
 
 local function getTargetSoundGroup(name: string): SoundGroup
-    if name == "StreetAmbience" then
+    if name == "StreetAmbience" or name == "MatchCrowd" then
         return ambienceGroup
     elseif name == "HubMusic" then
         return musicGroup
@@ -221,6 +224,21 @@ function SoundController.UpdateStaminaAudio(staminaRatio: number)
     sound.PlaybackSpeed = 1 + level * 0.25
 end
 
+-- Air rushing past while running; called every frame by FirstPersonController with 0..1 (by speed)
+function SoundController.UpdateRunWind(level: number)
+    local sound = windSound
+    if not sound then return end
+    sound.Volume += (level * loadedSounds.RunWind.Volume - sound.Volume) * 0.15
+    sound.PlaybackSpeed = 0.9 + level * 0.35
+    if sound.Volume < 0.005 then
+        if sound.IsPlaying then
+            sound:Pause()
+        end
+    elseif not sound.IsPlaying then
+        sound:Resume()
+    end
+end
+
 function SoundController.Init()
     setupAudioBuses()
     preloadSounds()
@@ -236,12 +254,14 @@ function SoundController.Init()
     heartbeatSound = loadedSounds.Heartbeat:Clone()
     heartbeatSound.Parent = SoundService
 
-    -- Hub only: light acoustic music under the street ambience (matches stay music-free for focus)
-    if GameMode.Current == "Hub" then
-        local music = loadedSounds.HubMusic:Clone()
-        music.Parent = SoundService
-        music:Play()
-    end
+    windSound = loadedSounds.RunWind:Clone()
+    windSound.Volume = 0
+    windSound.Parent = SoundService
+
+    -- Hub: light acoustic music under the street ambience. Match: no music (focus), a neighborhood crowd instead
+    local bed = loadedSounds[if GameMode.Current == "Hub" then "HubMusic" else "MatchCrowd"]:Clone()
+    bed.Parent = SoundService
+    bed:Play()
 
     -- Hook Match State Updates for referee whistles
     local lastPhase: Types.MatchPhase = "Lobby"

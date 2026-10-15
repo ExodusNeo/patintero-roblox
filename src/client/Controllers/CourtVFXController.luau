@@ -143,7 +143,7 @@ function CourtVFXController.Init()
     end)
 
     -- Cosmetic action (Slide dust)
-    local cosmeticEvent = Remotes.GetUnreliableEvent("CosmeticAction")
+    local cosmeticEvent = Remotes.GetEvent("CosmeticAction")
     cosmeticEvent.OnClientEvent:Connect(function(actionType: string, position: Vector3)
         if actionType == "Slide" then
             createSlideDust(position)

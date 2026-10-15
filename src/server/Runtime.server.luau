@@ -20,6 +20,9 @@ local StyleService = require(ServerScriptService.Server.Systems.StyleService)
 local TagService = require(ServerScriptService.Server.Systems.TagService)
 local MatchService = require(ServerScriptService.Server.Systems.MatchService)
 local AvatarService = require(ServerScriptService.Server.Systems.AvatarService)
+local ProgressionService = require(ServerScriptService.Server.Systems.ProgressionService)
+local FunnelService = require(ServerScriptService.Server.Systems.FunnelService)
+local TutorialService = require(ServerScriptService.Server.Systems.TutorialService)
 
 print(`[Server] Initializing Patintero Server Systems ({GameMode.Current})...`)
 
@@ -35,6 +38,9 @@ DataService.Init()
 StyleService.Init()
 TravelService.Init()
 AvatarService.Init()
+ProgressionService.Init()
+FunnelService.Init(GameMode.Current ~= "Match")
+TutorialService.Init(GameMode.Current ~= "Match")
 
 if GameMode.Current == "Match" then
     destroy("Hub")
