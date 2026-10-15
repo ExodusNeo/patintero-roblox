@@ -5,7 +5,7 @@
     chalk team marks (an amber scribble under your side), the clock and round ticks, the role line,
     crosshair + hit marker, the chalk stamina stroke, and painted callouts for events
     ("TUBIG!", zones, tags, revives, level-ups, the winner + MVP). Layout follows the 1366x768 mockup.
-    In the first-time tutorial (TutorialStep) the clock shows the step, the role line the current objective.
+    In the first-time tutorial (TutorialStep) the clock reads TUTORIAL; TutorialController draws the step card.
 ]]
 
 local Players = game:GetService("Players")
@@ -389,13 +389,9 @@ function HUDController.Init()
         showCallout(if userId == player.UserId then "You're back in" else "Back in", `{name} · {byName}'s Tubig`, PASSER_COLOR)
     end)
 
-    -- Tutorial: step 0 = finished
-    Remotes.GetEvent("TutorialStep").OnClientEvent:Connect(function(step: number, total: number, title: string, hint: string)
-        clockLabel.Text = if step > 0 then `{step}/{total}` else "DONE"
-        roleName.Text = "Tutorial"
-        roleName.TextColor3 = C.Sodium
-        roleHint.Text = hint
-        showCallout(title, hint, if title == "Tagged!" then C.Signal else PASSER_COLOR, step == 0)
+    Remotes.GetEvent("TutorialStep").OnClientEvent:Connect(function(info: Types.TutorialStepInfo)
+        clockLabel.Text = if info.kind == "done" then "DONE" else "TUTORIAL"
+        roleHint.Text = "" -- the tutorial card says what to do
     end)
 
     Remotes.GetEvent("LevelUp").OnClientEvent:Connect(function(level: number)

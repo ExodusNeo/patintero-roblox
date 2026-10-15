@@ -55,6 +55,18 @@ export type MatchState = {
     mvpPoints: number?,
 }
 
+-- Tutorial card + world beacon. kind: "step" (new objective), "tagged" (sent home), "done" (finished)
+export type TutorialStepInfo = {
+    kind: "step" | "tagged" | "done",
+    step: number,
+    total: number,
+    title: string,
+    hint: string,
+    keys: { string }, -- key caps to draw, e.g. { "SHIFT" }
+    target: Vector3?, -- beacon position (nil = no beacon)
+    targetLabel: string?,
+}
+
 export type Rarity = "Common" | "Rare" | "Epic" | "Legendary"
 
 export type SkillKind = "Dash" | "Blink" | "Haste" | "SecondWind" | "LongArm" | "Slow" | "Veil"

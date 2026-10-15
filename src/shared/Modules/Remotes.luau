@@ -23,7 +23,8 @@ local REMOTE_DEFINITIONS = {
         SwitchLine = "RemoteEvent", -- client -> server: guard hops to the next free line
         PasserRevived = "RemoteEvent", -- server -> all: (revivedUserId, revivedName, byName) a Tubig brought a teammate back
         LevelUp = "RemoteEvent", -- server -> player: (newLevel)
-        TutorialStep = "RemoteEvent", -- server -> player: (step, total, title, hint) first-time tutorial
+        TutorialStep = "RemoteEvent", -- server -> player: (info: TutorialStepInfo) first-time tutorial
+        PracticeTag = "RemoteEvent", -- client -> server: (runner model) tutorial guard practice
         -- client -> server -> others: ("Slide", position[, userId]). Reliable: other clients pose the slide from it
         CosmeticAction = "RemoteEvent",
     },

@@ -12,6 +12,7 @@ local ContextActionService = game:GetService("ContextActionService")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
+local CollectionService = game:GetService("CollectionService")
 
 local Types = require(ReplicatedStorage.Shared.Modules.Types)
 local Config = require(ReplicatedStorage.Shared.Modules.Config)
@@ -67,6 +68,20 @@ local function findTaggablePasser(): Player?
     end
 
     return bestPlayer
+end
+
+-- Tutorial guard practice: the dummy runner (CollectionService tag "PracticeRunner") in reach and in front
+local function findPracticeRunner(): Model?
+    local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart") :: BasePart?
+    if not root then return nil end
+    for _, model in CollectionService:GetTagged("PracticeRunner") do
+        if not model:IsA("Model") then continue end
+        local toTarget = model:GetPivot().Position - root.Position
+        if toTarget.Magnitude <= Config.Tagging.BaseReachDistance and camera.CFrame.LookVector:Dot(toTarget.Unit) > 0.3 then
+            return model
+        end
+    end
+    return nil
 end
 
 -- Swipe with the Animate script's sword-slash animation. Played on our own character, so it replicates:
@@ -128,6 +143,11 @@ local function triggerTagAttempt()
     if target then
         local tagAttemptRemote = Remotes.GetEvent("TagAttempt")
         tagAttemptRemote:FireServer(target.UserId)
+    else
+        local runner = findPracticeRunner()
+        if runner then
+            Remotes.GetEvent("PracticeTag"):FireServer(runner)
+        end
     end
 end
 
