@@ -4,7 +4,8 @@
     Match HUD in the "Kanto Night" style (UIKit): a torn scoreboard patch with the Red/Blue scores over
     chalk team marks (an amber scribble under your side), the clock and round ticks, the role line,
     crosshair + hit marker, the chalk stamina stroke, and painted callouts for events
-    ("TUBIG!", zones, tags, the winner). Layout follows the 1366x768 mockup.
+    ("TUBIG!", zones, tags, revives, level-ups, the winner + MVP). Layout follows the 1366x768 mockup.
+    In the first-time tutorial (TutorialStep) the clock shows the step, the role line the current objective.
 ]]
 
 local Players = game:GetService("Players")
@@ -335,12 +336,14 @@ function HUDController.Init()
         elseif state.phase == "MatchOver" then
             clockLabel.Text = "MATCH OVER"
             local winner: Types.Side? = if state.redScore > state.blueScore then "Red" elseif state.blueScore > state.redScore then "Blue" else nil
+            local mvp = if state.mvpName then `MVP {state.mvpName} · {state.mvpPoints} pts` else nil
             if winner then
-                showCallout(`{winner} wins`, nil, SIDE_COLORS[winner], true)
+                showCallout(`{winner} wins`, mvp, SIDE_COLORS[winner], true)
             else
-                showCallout("Draw", nil, C.Dim, true)
+                showCallout("Draw", mvp, C.Dim, true)
             end
         end
+
     end)
 
     Remotes.GetEvent("PlayerStateUpdated").OnClientEvent:Connect(function(state: Types.PlayerMatchState)
@@ -351,7 +354,8 @@ function HUDController.Init()
             color = PASSER_COLOR
         elseif state.team == "Guards" then
             roleName.Text = "Guard"
-            local line = (string.gsub(state.guardRole or "your line", "(%a)(%d)", "%1 %2")) -- "Line2" -> "Line 2"
+            local line = if state.guardRole == "Patotot" then "the center line"
+                else (string.gsub(state.guardRole or "your line", "(%a)(%d)", "%1 %2")) -- "Line2" -> "Line 2"
             roleHint.Text = `defend {line}`
             color = GUARD_COLOR
         else
@@ -379,6 +383,23 @@ function HUDController.Init()
 
     Remotes.GetEvent("TubigScored").OnClientEvent:Connect(function(_targetUserId: number, playerName: string, _score: number)
         showCallout("Tubig!", `{playerName} scored +5`, C.Sodium, true)
+    end)
+
+    Remotes.GetEvent("PasserRevived").OnClientEvent:Connect(function(userId: number, name: string, byName: string)
+        showCallout(if userId == player.UserId then "You're back in" else "Back in", `{name} · {byName}'s Tubig`, PASSER_COLOR)
+    end)
+
+    -- Tutorial: step 0 = finished
+    Remotes.GetEvent("TutorialStep").OnClientEvent:Connect(function(step: number, total: number, title: string, hint: string)
+        clockLabel.Text = if step > 0 then `{step}/{total}` else "DONE"
+        roleName.Text = "Tutorial"
+        roleName.TextColor3 = C.Sodium
+        roleHint.Text = hint
+        showCallout(title, hint, if title == "Tagged!" then C.Signal else PASSER_COLOR, step == 0)
+    end)
+
+    Remotes.GetEvent("LevelUp").OnClientEvent:Connect(function(level: number)
+        showCallout(`Level {level}`, nil, C.Sodium, true)
     end)
 
     Remotes.GetEvent("TagConfirmed").OnClientEvent:Connect(function(taggerUserId: number)

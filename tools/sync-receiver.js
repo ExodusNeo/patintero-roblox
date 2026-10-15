@@ -25,9 +25,14 @@ const server = http.createServer((req, res) => {
         return res.end("bad path");
       }
       const target = path.join(root, rel);
-      fs.mkdirSync(path.dirname(target), { recursive: true });
-      fs.writeFileSync(target, source.replace(/\r\n/g, "\n"));
-      written++;
+      const text = source.replace(/\r\n/g, "\n");
+      // Skip unchanged files so their CRLF checkout isn't rewritten as LF (shows as modified in git).
+      const old = fs.existsSync(target) ? fs.readFileSync(target, "utf8").replace(/\r\n/g, "\n") : null;
+      if (old !== text) {
+        fs.mkdirSync(path.dirname(target), { recursive: true });
+        fs.writeFileSync(target, text);
+        written++;
+      }
       res.end("ok");
     } catch (e) {
       res.statusCode = 500;

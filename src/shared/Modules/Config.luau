@@ -16,8 +16,12 @@ local Config = {
 
     Hub = {
         Center = Vector3.new(400, 0, 0),
-        PadSizes = { 2, 4, 6, 8 },
+        PadSizes = { 8 }, -- one 4 V 4 lobby: everyone gathers there; it starts short-handed (MinToStart / FillTimeout)
         CountdownTime = 5,
+        MinToStart = 2, -- a lobby that isn't full starts with this many seated...
+        FillTimeout = 30, -- ...after waiting this long (seconds) for the rest
+        LeaderboardSize = 10,
+        LeaderboardRefresh = 60, -- seconds
     },
 
     Court = {
@@ -77,6 +81,19 @@ local Config = {
         PointsForTubig = 5,
         PointsForZoneAdvance = 1,
         PointsForTag = 2,
+        -- Server movement check for Passers: zone progress is ignored while a Passer moves faster than this
+        MaxRunSpeed = 45, -- studs/s sustained (sprint x fastest style x haste, with slack)
+        MaxBurst = 32, -- studs on top of that: one dash + one blink + latency
+    },
+
+    Progression = {
+        XPPerZone = 5,
+        XPPerTubig = 25,
+        XPPerTag = 15,
+        XPPerRound = 10,
+        XPPerWin = 20,
+        XPLevelBase = 50, -- level = 1 + floor(sqrt(xp / XPLevelBase)): 50 XP -> 2, 200 -> 3, 450 -> 4
+        DailySpins = 3, -- once per UTC day, on the first join
     },
 
     Styles = {
@@ -95,6 +112,7 @@ local Config = {
 
     Data = {
         StoreName = "PatinteroPlayerData_v1",
+        WeeklyTubigStore = "PatinteroWeeklyTubig_v1", -- OrderedDataStore; one scope per week (Monday 00:00 UTC)
         Retries = 3,
     },
 

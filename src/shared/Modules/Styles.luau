@@ -23,16 +23,16 @@ Styles.RarityColors = table.freeze({
 
 local list: { Types.StyleDef } = {
     {
-        id = "Tsinelas", name = "Tsinelas", rarity = "Common",
+        id = "Tsinelas", name = "Quickstep", rarity = "Common",
         description = "Light on your feet. Slipper-fast bursts.",
         speedMult = 1.05, staminaMult = 1, reachBonus = 0,
         skills = {
             Q = { name = "Dash", kind = "Dash", cooldown = 6, power = 55, duration = 0.2 },
-            E = { name = "Takbo!", kind = "Haste", cooldown = 12, power = 1.3, duration = 2.5 },
+            E = { name = "Sprint!", kind = "Haste", cooldown = 12, power = 1.3, duration = 2.5 },
         },
     },
     {
-        id = "Kanto", name = "Kanto", rarity = "Common",
+        id = "Kanto", name = "Streetwise", rarity = "Common",
         description = "Street-corner endurance. Never runs out of breath.",
         speedMult = 1, staminaMult = 1.25, reachBonus = 0,
         skills = {
@@ -41,7 +41,7 @@ local list: { Types.StyleDef } = {
         },
     },
     {
-        id = "Bantay", name = "Bantay", rarity = "Common",
+        id = "Bantay", name = "Sentinel", rarity = "Common",
         description = "Born to guard. Longer arms, longer reach.",
         speedMult = 1, staminaMult = 1, reachBonus = 1,
         skills = {
@@ -50,25 +50,25 @@ local list: { Types.StyleDef } = {
         },
     },
     {
-        id = "Sipa", name = "Sipa", rarity = "Rare",
+        id = "Sipa", name = "Leapfrog", rarity = "Rare",
         description = "Hop past the line before anyone blinks.",
         speedMult = 1.05, staminaMult = 1, reachBonus = 0,
         skills = {
             Q = { name = "Hop", kind = "Blink", cooldown = 9, power = 14 },
-            E = { name = "Takbo!", kind = "Haste", cooldown = 12, power = 1.3, duration = 2.5 },
+            E = { name = "Sprint!", kind = "Haste", cooldown = 12, power = 1.3, duration = 2.5 },
         },
     },
     {
-        id = "Tumbang", name = "Tumbang", rarity = "Rare",
+        id = "Tumbang", name = "Tin Can", rarity = "Rare",
         description = "Knock the can, scatter the crowd.",
         speedMult = 1, staminaMult = 1.1, reachBonus = 0.5,
         skills = {
             Q = { name = "Dash", kind = "Dash", cooldown = 6, power = 55, duration = 0.2 },
-            E = { name = "Lata Shock", kind = "Slow", cooldown = 15, radius = 14, mult = 0.5, duration = 2 },
+            E = { name = "Can Shock", kind = "Slow", cooldown = 15, radius = 14, mult = 0.5, duration = 2 },
         },
     },
     {
-        id = "Habagat", name = "Habagat", rarity = "Epic",
+        id = "Habagat", name = "Typhoon", rarity = "Epic",
         description = "Monsoon wind. Slips through gaps, drags enemies down.",
         speedMult = 1.1, staminaMult = 1.1, reachBonus = 0,
         skills = {
@@ -77,7 +77,7 @@ local list: { Types.StyleDef } = {
         },
     },
     {
-        id = "Anino", name = "Anino", rarity = "Epic",
+        id = "Anino", name = "Phantom", rarity = "Epic",
         description = "A shadow on the street. Can't tag what you can't touch.",
         speedMult = 1.05, staminaMult = 1, reachBonus = 0,
         skills = {
@@ -86,7 +86,7 @@ local list: { Types.StyleDef } = {
         },
     },
     {
-        id = "Bathala", name = "Bathala", rarity = "Legendary",
+        id = "Bathala", name = "Sovereign", rarity = "Legendary",
         description = "The street bows. Time stops for everyone but you.",
         speedMult = 1.1, staminaMult = 1.2, reachBonus = 1,
         skills = {

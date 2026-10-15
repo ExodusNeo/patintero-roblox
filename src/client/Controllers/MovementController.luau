@@ -108,9 +108,17 @@ end
 -- MoveDirection every frame before Input+1 (verified in Studio), so we read it there and override
 -- with Move(); our override never feeds back. Humanoid speed scales with the vector's length.
 local function stepMomentum(deltaTime: number)
-    local _, humanoid, _ = getCharacterComponents()
-    if not humanoid or humanoid.Health <= 0 then
+    local character, humanoid, _ = getCharacterComponents()
+    if not character or not humanoid or humanoid.Health <= 0 then
         moveVector = Vector3.zero
+        return
+    end
+
+    -- Hub queue pads: the server picked a seat (`SeatWalk`); walk there until it sits us down
+    local seatWalk = character:GetAttribute("SeatWalk")
+    if typeof(seatWalk) == "Vector3" then
+        moveVector = Vector3.zero
+        humanoid:MoveTo(seatWalk)
         return
     end
 
@@ -187,7 +195,7 @@ local function triggerSlide()
     root.AssemblyLinearVelocity = Vector3.new(boostVel.X, root.AssemblyLinearVelocity.Y, boostVel.Z)
 
     -- Fire cosmetic slide event for dust VFX
-    local cosmeticEvent = Remotes.GetUnreliableEvent("CosmeticAction")
+    local cosmeticEvent = Remotes.GetEvent("CosmeticAction")
     cosmeticEvent:FireServer("Slide", root.Position)
 
     -- End slide after duration
@@ -279,8 +287,8 @@ function MovementController.Init()
 
     -- RenderStepped loop: Slide velocity sustain, stamina economy, and guard rail locking
     RunService.RenderStepped:Connect(function(deltaTime: number)
-        local _, humanoid, root = getCharacterComponents()
-        if not humanoid or not root then return end
+        local character, humanoid, root = getCharacterComponents()
+        if not character or not humanoid or not root then return end
 
         local now = os.clock()
         applySpeed() -- speed modifiers (haste/slow) change at any time
@@ -295,11 +303,11 @@ function MovementController.Init()
             humanoid.WalkSpeed = math.max(targetWalkSpeed, humanoid.WalkSpeed - Config.Movement.SprintRampRate * 3 * deltaTime)
         end
 
-        -- Track fall speed for hard landings; no jumping without the stamina for it
+        -- Track fall speed for hard landings; no jumping without the stamina for it (or while walked to a hub seat)
         if humanoid.FloorMaterial == Enum.Material.Air then
             fallSpeed = math.max(fallSpeed, -root.AssemblyLinearVelocity.Y)
         end
-        local canJump = currentStamina >= Config.Movement.JumpStaminaCost
+        local canJump = currentStamina >= Config.Movement.JumpStaminaCost and character:GetAttribute("SeatWalk") == nil
         if canJump ~= jumpEnabled then
             jumpEnabled = canJump
             humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, canJump)

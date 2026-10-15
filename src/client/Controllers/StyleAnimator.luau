@@ -201,6 +201,10 @@ function StyleAnimator.Play(character: Model, name: string): boolean
     return true
 end
 
+function StyleAnimator.IsPlaying(character: Model): boolean
+    return playing[character] ~= nil
+end
+
 function StyleAnimator.Stop(character: Model)
     local playback = playing[character]
     if playback and not playback.fadeOutAt then

@@ -26,6 +26,7 @@ local player = Players.LocalPlayer
 local camera = Workspace.CurrentCamera or Workspace:WaitForChild("Camera") :: Camera
 
 local isGuard = false
+local lastRole: string? = nil
 local lastTagTime = 0
 local slashTrack: AnimationTrack? = nil -- loaded once per character
 
@@ -172,6 +173,12 @@ function TagController.Init()
             isGuard = nowGuard
             setGuardControls(isGuard)
         end
+        -- Line hop landed (same guard, new line): whoosh
+        local role = if nowGuard then state.guardRole else nil
+        if role and lastRole and role ~= lastRole then
+            SoundController.PlaySFX("DashWhoosh", Vector2.new(1.05, 1.2), 0.7)
+        end
+        lastRole = role
     end)
 
     -- Listen to confirmed tags from server
