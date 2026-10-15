@@ -17,6 +17,7 @@ local FirstPersonController = require(script.Parent.Controllers.FirstPersonContr
 local MovementController = require(script.Parent.Controllers.MovementController)
 local TagController = require(script.Parent.Controllers.TagController)
 local BodyPose = require(script.Parent.Controllers.BodyPose)
+local TutorialController = require(script.Parent.Controllers.TutorialController)
 local StyleController = require(script.Parent.Controllers.StyleController)
 local SpinController = require(script.Parent.Controllers.SpinController)
 
@@ -32,6 +33,7 @@ if GameMode.Current == "Match" then
     FirstPersonController.Init()
     TagController.Init()
     BodyPose.Init()
+    TutorialController.Init()
 else
     SpinController.Init()
 end

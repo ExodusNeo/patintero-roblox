@@ -253,10 +253,17 @@ only new systems. If several rows match, load all of them. If none match, say so
   ("MVP name · N pts", `MatchState.mvpName`/`mvpPoints`).
 - **First-time tutorial** (`TutorialService`): a hub player whose `TutorialDone` loads false is sent alone to a
   reserved match-place server (teleport data `tutorial = true`); there `MatchService` runs `TutorialService.Run`
-  instead of matches. Steps: Zone 1 (sprint), Zone 2 (slide past a guard), Safehouse, home for TUBIG, past two
-  dummy guards (arms wide, Blue shirts) patrolling Line1 and Line2; getting within 4.5 studs of one sends you home
-  to step 1. The HUD clock shows the step ("2/4"), the role line the objective (`TutorialStep`). Finishing sets
-  `TutorialDone` and returns you to the hub. A failed data load counts as done (no tutorial loop in an outage).
+  instead of matches. Each of the 7 steps completes on the action itself: sprint into Zone 1 (speed above
+  WalkSpeed + 4), slide (the `CosmeticAction` "Slide"), reach Zone 2 past a guard, use a skill (`UseSkill`), the
+  Safehouse, home for TUBIG (fires `TubigScored`: whistle, fanfare, cheer), then **guard practice**: you guard Line 2
+  and tag a jogging practice runner (CollectionService tag `PracticeRunner`; `TagController` sends `PracticeTag`,
+  the server checks reach). From step 3 two dummy guards (arms wide, Blue shirts) slide along Line1 / Line2 toward
+  you when you're within 22 studs of their line; within 4.5 studs they send you back to the start of the leg (Home
+  on the way out, the Safehouse on the way back), keeping the step. `TutorialController` draws the step card
+  (left of center: STEP n OF 7, title, what to do, chalk key caps, a tick per step; a finished step snaps its tick
+  amber with a chime, a tag shakes the card) and a beacon at the target (sodium light pillar, pulsing chalk ring,
+  name). The HUD clock reads TUTORIAL. Finishing sets `TutorialDone`, gives `Config.Progression.TutorialSpins` (3)
+  and returns you to the hub. A failed data load counts as done (no tutorial loop in an outage).
 - **Analytics funnel** `MatchLoop` (`FunnelService`): 1 Joined hub, 2 Sat in lobby, 3 Match started, 4 Match
   finished, 5 Back in hub; the session id travels in teleport data (`funnels`).
 - Map: the court on a barangay street with house rows on all four sides (`CourtService.BuildNeighborhood`),

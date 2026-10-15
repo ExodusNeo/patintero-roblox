@@ -31,54 +31,24 @@ the current state. Agents update it after every change (AGENTS.md §1).
   they hold data/types or top-level code only. Expected.
 
 ## Current state (2026-10-16)
-- `main` at `47613ff` (PR #13 merged). **Open: PR #14** (`feat/hub-court-progression-tutorial`) with everything
-  below; the user merges. Until then, push follow-up changes to that branch.
-- **In PR #14** — the hub rebuild:
-  - Hub at dusk with `HubStreet` (night lighting, prop spots, Sketchfab props placed by `HubStreet.Dress`).
-  - Lobbies moved onto covered-court bleachers (Red/Blue sections per 2/4/6/8 lobby; the side you sit on is
-    your team), auto-walk to a free seat (`SeatWalk` attribute), owner test bleacher.
-  - Court floor texture (`assets/court/court_half.png`), covered court + bleachers in `FilipinoStreetEnvironment`.
-  - Modified: `HubService`, `MatchService`, `FilipinoStreetEnvironment`, `MovementController`, `AGENTS.md`,
-    `CLAUDE.md`, `tools/sync-receiver.js`. New: `HubStreet.luau`, `CREDITS.md`, `HANDOFF.md`,
-    `assets/court/`, `assets/models/`, `tools/blender/{court_texture,hub_props,preview_hub}.py`.
-- **In PR #14** — run wind + role arms (match, AGENTS.md §5 *Presentation*):
-  - `FirstPersonController`: wind streaks past both sides of the view + `RunWind` loop, scaled by speed.
-  - New `BodyPose` controller (was `RoleArms`): Passers pump arms side to side while running, Guards hold arms
-    wide (blocking); steps aside for style animations and Action tracks (tag swipe). Slide pose: body drops
-    `SLIDE_DROP` (= camera dip), leans back, leg out; others see it via the `CosmeticAction` relay, now a
-    reliable `RemoteEvent` carrying the slider's `UserId`; `PlayerStateService` validates it (Slide only, rate
-    limit, 30-stud range). First person shows forearms + hands, legs while sliding.
-  - Small hooks: `SkillEffects.TEX` exported, `StyleAnimator.IsPlaying`, `SoundController.UpdateRunWind`,
-    `FirstPersonController.SetSliding` → `BodyPose.SetSliding`.
-  - Verified: solo playtest (poses measured, body drop = camera dip, screenshots) and 2-client tests (slide
-    pose seen by the other client; relay drops too-soon / too-far / unknown events; third-person screenshots of
-    guard arms, runner pump and slide; no errors).
-- **In PR #14** — game improvements batch (AGENTS.md §5 Hub + Match):
-  - Hub: short-handed lobby start (2+ seated, 30 s), weekly TUBIG board (`LeaderboardService`, never written
-    from Studio), funnel steps (`FunnelService`).
-  - Match: spectate when tagged, Tubig revives a teammate, server movement check (rubber-bands too-fast
-    Passers), XP/levels + daily spins (`ProgressionService`, `DataService` saves `xp`/`lastDaily`/`seenGuide`),
-    MVP at match over, first-match "HOW TO PLAY" card, match crowd loop, line-hop whoosh.
-  - New remotes `PasserRevived`, `LevelUp`; new attributes `Tagged`, `XP`, `Level`, `SeenGuide`.
-  - Verified in Studio: solo (guide card, XP/Level, 60-stud teleport rubber-banded, no false positive on
-    sprint/slide), 3 clients (spectate follows teammate, Tubig revive + callout, MVP), 2 clients in the hub
-    (board renders, 2/4 lobby starts after 30 s; ReserveServer is 403 in Studio as expected). No errors.
-  - The live weekly board has 4 Tubigs on ExodusNeo from today's Studio tests (before Studio writes were
-    blocked); remove with `RemoveAsync("1819520599")` on this week's scope if unwanted.
-- **In PR #14** — follow-up batch:
-  - One 4 V 4 lobby (`PadSizes = { 8 }`): the 2/4/6 bleacher sections were deleted from the saved hub and the
-    8-player pair moved to the middle of the bleachers (z 136).
-  - First-time tutorial (`TutorialService`, `StudioMode = "Tutorial"` in Studio) replaces the HOW TO PLAY card;
-    `SeenGuide` became `TutorialDone` (old data key still read).
-  - English display names for styles/skills (ids unchanged), "the center line" instead of Patotot.
-  - Verified in Studio: tutorial end to end (dummy tag → back to step 1 → finish → `TutorialDone`), dummies
-    look right; style names show in the skill bar. Not verified: the hub → tutorial → hub teleports (live only).
-- 2026-10-15: created the Obsidian vault; made the sync receiver skip unchanged files (it used to rewrite every
-  file with LF endings, so git showed all of `src/` as modified); added rules to AGENTS.md/CLAUDE.md: sync +
-  vault + handoff update after every change, always ponytail, always caveman ultra.
+- `main` at `e1169a3`: **PR #14 merged** (covered-court hub with one 4 V 4 lobby + short-handed start, weekly
+  TUBIG board, run wind + `BodyPose`, spectate + TUBIG revive, server movement check, XP/levels + daily spins,
+  MVP, crowd loop, line-hop whoosh, `MatchLoop` funnel, English style names, first-time tutorial). Details per
+  feature in AGENTS.md §5.
+- **Open: branch `feat/interactive-tutorial`** (its PR is linked in the latest session) — the tutorial reworked to
+  be learn-by-doing: 7 steps that complete on the action (sprint, slide, Zone 2 past a guard, a skill, Safehouse,
+  TUBIG with fanfare, guard practice tagging a runner), guards that track you along their line, a step card +
+  world beacon (`TutorialController`), +3 spins on finishing. New remote `PracticeTag`, type `TutorialStepInfo`.
+  - Verified in Studio (`StudioMode = "Tutorial"`): every step completes on its action (walking into Zone 1
+    without sprinting does not), guards spawn at step 3 and tag, guard practice tag → complete, `TutorialDone`,
+    +3 spins; card and beacon screenshotted. Fixed during the test: a tag on the way home used to send you home
+    and finish TUBIG; it now sends you to the Safehouse (that fix was read-checked, not replayed).
+- Live data note: the weekly board has 4 Tubigs on ExodusNeo from Studio tests (before Studio writes were
+  blocked); remove with `RemoveAsync("1819520599")` on this week's scope if unwanted.
+- Not verified anywhere yet (live only): hub → match / tutorial → hub teleports, reserved servers, funnel data.
 
 ## Next steps / open items
-- Review and merge PR #14.
+- Review and merge the `feat/interactive-tutorial` PR.
 - Save the place (Ctrl+S), publish the hub and republish over the match place, so the wind/arms go live.
 - Paste the `CREDITS.md` list into the game description (CC BY props require attribution).
 - Republish over the match place after the hub changes, then test the hub → match → hub loop live with the

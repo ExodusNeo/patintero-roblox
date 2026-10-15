@@ -94,6 +94,7 @@ local Config = {
         XPPerWin = 20,
         XPLevelBase = 50, -- level = 1 + floor(sqrt(xp / XPLevelBase)): 50 XP -> 2, 200 -> 3, 450 -> 4
         DailySpins = 3, -- once per UTC day, on the first join
+        TutorialSpins = 3, -- reward for finishing the tutorial
     },
 
     Styles = {
